@@ -106,7 +106,7 @@ func (c *Client) connectUpstream() {
 	// Send any WEBIRC lines
 	if upstreamConfig.WebircPassword != "" {
 		webircLine := fmt.Sprintf(
-			"WEBIRC %s webgateway %s %s\n",
+			"WEBIRC %s websocketgateway %s %s\n",
 			upstreamConfig.WebircPassword,
 			client.remoteHostname,
 			client.remoteAddr,
