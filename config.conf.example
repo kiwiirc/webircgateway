@@ -1,0 +1,22 @@
+# 1 = Debug; 2 = Info; 3 = Warn;
+logLevel = 2
+
+[server.1]
+bind = "127.0.0.1"
+port = 8081
+[server.2]
+bind = "127.0.0.1"
+port = 8082
+tls = true
+
+[engines]
+websocket
+sockjs
+
+# Connections will be sent to a random upstream
+[upstream.1]
+hostname = "irc.example.net"
+port = 6667
+tls = false
+timeout = 5
+webirc = ""

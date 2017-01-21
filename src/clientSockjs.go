@@ -1,0 +1,70 @@
+package main
+
+//import "gopkg.in/igm/sockjs-go.v2/sockjs"
+import (
+	"net"
+	"net/http"
+	"strconv"
+
+	"github.com/igm/sockjs-go/sockjs"
+)
+
+func sockjsHTTPHandler() {
+	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, sockjsHandler)
+	http.Handle("/webirc/sockjs", sockjsHandler)
+}
+
+func sockjsHandler(session sockjs.Session) {
+	client := NewClient()
+
+	remoteAddr, remotePort, _ := net.SplitHostPort(session.Request().RemoteAddr)
+	client.remoteAddr = remoteAddr
+	client.remotePort, _ = strconv.Atoi(remotePort)
+
+	clientHostnames, err := net.LookupAddr(client.remoteAddr)
+	if err != nil {
+		client.remoteHostname = client.remoteAddr
+	} else {
+		client.remoteHostname = clientHostnames[0]
+	}
+
+	client.Log(2, "New client from %s %s", client.remoteAddr, client.remoteHostname)
+
+	// Read from sockjs
+	go func() {
+		for {
+			msg, err := session.Recv()
+			if err == nil && len(msg) > 0 {
+				client.Log(1, "client->: %s", msg)
+				select {
+				case client.Recv <- msg:
+				default:
+					client.Log(3, "Recv queue full. Dropping data")
+					// TODO: Should this really just drop the data or close the connection?
+				}
+			} else if err != nil {
+				client.Log(1, "Websocket read error: %s", err.Error())
+				break
+			} else if len(msg) == 0 {
+				client.Log(1, "Got 0 bytes from websocket")
+			}
+		}
+
+		client.signalClose <- "client_closed"
+	}()
+
+	// Write to sockjs
+	go func() {
+		for {
+			line, ok := <-client.Send
+			if !ok {
+				break
+			}
+
+			client.Log(1, "->ws: %s", line)
+			session.Send(line)
+		}
+	}()
+
+	client.Handle()
+}
