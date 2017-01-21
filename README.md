@@ -1,5 +1,5 @@
 # websocketgateway
-Simple websocket gateway to IRC networks
+Simple websocket gateway to IRC networks for web clients
 
 ### Overview
 * Multiple servers, non-tls / tls / multiple ports
