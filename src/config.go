@@ -24,11 +24,13 @@ type ConfigServer struct {
 
 // Config - Config options for the running app
 var Config struct {
-	configFile    string
-	logLevel      int
-	upstreams     []ConfigUpstream
-	servers       []ConfigServer
-	serverEngines []string
+	configFile     string
+	logLevel       int
+	upstreams      []ConfigUpstream
+	servers        []ConfigServer
+	serverEngines  []string
+	clientRealname string
+	clientUsername string
 }
 
 func loadConfig() {
@@ -50,6 +52,11 @@ func loadConfig() {
 				log.Println("Config option logLevel must be between 1-3. Setting default value of 3.")
 				Config.logLevel = 3
 			}
+		}
+
+		if strings.Index(section.Name(), "clients") == 0 {
+			Config.clientUsername = section.Key("username").MustString("")
+			Config.clientRealname = section.Key("realname").MustString("")
 		}
 
 		if strings.Index(section.Name(), "server.") == 0 {
