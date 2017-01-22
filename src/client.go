@@ -8,6 +8,8 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -126,8 +128,15 @@ func (c *Client) connectUpstream() {
 				break
 			}
 
-			client.Log(1, "->upstream: %s", data)
-			upstream.Write([]byte(data + "\n"))
+			// Some IRC lines such as USER commands may have some parameter replacements
+			line, err := clientLineReplacements(*client, data)
+			if err != nil {
+				client.signalClose <- "invalid_client_line"
+				break
+			}
+
+			client.Log(1, "->upstream: %s", line)
+			upstream.Write([]byte(line + "\n"))
 		}
 
 		upstream.Close()
@@ -162,4 +171,44 @@ func findUpstream() (ConfigUpstream, error) {
 	ret = Config.upstreams[randIdx]
 
 	return ret, nil
+}
+
+func clientLineReplacements(client Client, line string) (string, error) {
+	// USER <username> <hostname> <servername> <realname>
+	if strings.HasPrefix(line, "USER") {
+		parts := strings.Split(line, " ")
+		if len(parts) < 5 {
+			return line, errors.New("Invalid USER line")
+		}
+
+		if Config.clientUsername != "" {
+			parts[1] = Config.clientUsername
+			parts[1] = strings.Replace(parts[1], "%i", ipv4ToHex(client.remoteAddr), -1)
+			parts[1] = strings.Replace(parts[1], "%h", client.remoteHostname, -1)
+		}
+		if Config.clientRealname != "" {
+			parts[4] = ":" + Config.clientRealname
+			parts[4] = strings.Replace(parts[4], "%i", ipv4ToHex(client.remoteAddr), -1)
+			parts[4] = strings.Replace(parts[4], "%h", client.remoteHostname, -1)
+			// We've just set the realname (final param 4) so remove everything else after it
+			parts = parts[:5]
+		}
+
+		line = strings.Join(parts, " ")
+	}
+
+	return line, nil
+}
+
+func ipv4ToHex(ip string) string {
+	parts := strings.Split(ip, ".")
+	for idx, part := range parts {
+		num, _ := strconv.Atoi(part)
+		parts[idx] = fmt.Sprintf("%x", num)
+		if len(parts[idx]) == 1 {
+			parts[idx] = "0" + parts[idx]
+		}
+	}
+
+	return strings.Join(parts, "")
 }

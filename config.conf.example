@@ -1,6 +1,14 @@
 # 1 = Debug; 2 = Info; 3 = Warn;
 logLevel = 2
 
+[clients]
+# Default username / realname for IRC connections. If disabled it will use
+# the values provided from the RC client itself.
+# %h will be replaced with the users hostname
+# %i will be replaced with a hexed value of the users IP
+username = "%i"
+#realname = "I am a webchat user"
+
 [server.1]
 bind = "127.0.0.1"
 port = 8081
