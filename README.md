@@ -1,4 +1,4 @@
-# websocketgateway
+# webircgateway
 Simple websocket gateway to IRC networks for web clients
 
 ### Overview
