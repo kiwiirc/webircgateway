@@ -6,16 +6,18 @@ logLevel = 2
 # the values provided from the RC client itself.
 # %h will be replaced with the users hostname
 # %i will be replaced with a hexed value of the users IP
-username = "%i"
+#username = "%i"
 #realname = "I am a webchat user"
 
 [server.1]
-bind = "127.0.0.1"
-port = 8081
-[server.2]
-bind = "127.0.0.1"
-port = 8082
-tls = true
+bind = "0.0.0.0"
+port = 80
+
+# Example TLS server
+#[server.2]
+#bind = "0.0.0.0"
+#port = 443
+#tls = true
 
 [engines]
 websocket
