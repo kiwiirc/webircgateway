@@ -33,11 +33,10 @@ var Config struct {
 	clientUsername string
 }
 
-func loadConfig() {
+func loadConfig() error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, Config.configFile)
 	if err != nil {
-		log.Println(err.Error())
-		return
+		return err
 	}
 
 	// Clear the existing config
@@ -85,4 +84,6 @@ func loadConfig() {
 			}
 		}
 	}
+
+	return nil
 }

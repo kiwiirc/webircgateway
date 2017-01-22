@@ -7,16 +7,28 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 )
 
 func main() {
-	configFile := flag.String("config", "config.conf", "Config file")
+	configFile := flag.String("config", "config.conf", "Config file location")
+	runConfigTest := flag.Bool("test", false, "Just test the config file")
 	flag.Parse()
 
-	Config.configFile = *configFile
+	Config.configFile, _ = filepath.Abs(*configFile)
 	log.Printf("Using config file %s", Config.configFile)
-	loadConfig()
+
+	err := loadConfig()
+	if err != nil {
+		log.Printf("Config file error: %s", err.Error())
+		os.Exit(1)
+	}
+
+	if *runConfigTest {
+		log.Println("Config file is OK")
+		os.Exit(0)
+	}
 
 	watchForSignals()
 	initListenerEngines()
