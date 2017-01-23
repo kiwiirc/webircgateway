@@ -58,9 +58,6 @@ func (c *Client) Handle() {
 
 	closeReason := <-c.signalClose
 
-	close(c.Recv)
-	close(c.Send)
-
 	switch closeReason {
 	case "upstream_closed":
 		c.Log(2, "Upstream closed the connection")
@@ -148,13 +145,14 @@ func (c *Client) connectUpstream() {
 		for {
 			data, err := reader.ReadString('\n')
 			if err != nil {
-				client.Log(2, "Upstream connection closed")
 				break
 			}
 
+			client.Log(1, "upstream->: %s", data)
 			client.Send <- data
 		}
 
+		close(client.Send)
 		client.signalClose <- "upstream_closed"
 		upstream.Close()
 	}()

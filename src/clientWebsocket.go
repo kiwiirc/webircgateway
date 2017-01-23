@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"golang.org/x/net/websocket"
 )
@@ -28,6 +29,10 @@ func websocketHandler(ws *websocket.Conn) {
 
 	client.Log(2, "New client from %s %s", client.remoteAddr, client.remoteHostname)
 
+	// We wait until the client send queue has been drained
+	var sendDrained sync.WaitGroup
+	sendDrained.Add(1)
+
 	// Read from websocket
 	go func() {
 		for {
@@ -51,6 +56,7 @@ func websocketHandler(ws *websocket.Conn) {
 			}
 		}
 
+		close(client.Recv)
 		client.signalClose <- "client_closed"
 	}()
 
@@ -59,13 +65,18 @@ func websocketHandler(ws *websocket.Conn) {
 		for {
 			line, ok := <-client.Send
 			if !ok {
+				sendDrained.Done()
 				break
 			}
 
 			client.Log(1, "->ws: %s", line)
 			ws.Write([]byte(line))
 		}
+
+		ws.Close()
 	}()
 
 	client.Handle()
+	sendDrained.Wait()
+	ws.Close()
 }
