@@ -28,5 +28,8 @@ sockjs
 hostname = "irc.example.net"
 port = 6667
 tls = false
+# Connection timeout in seconds
 timeout = 5
+# Throttle the lines being written by X per second
+throttle = 2
 webirc = ""

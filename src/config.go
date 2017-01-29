@@ -13,6 +13,7 @@ type ConfigUpstream struct {
 	Port           int
 	TLS            bool
 	Timeout        int
+	Throttle       int
 	WebircPassword string
 }
 
@@ -73,6 +74,7 @@ func loadConfig() error {
 			upstream.Port = section.Key("port").MustInt(6667)
 			upstream.TLS = section.Key("tls").MustBool(false)
 			upstream.Timeout = section.Key("timeout").MustInt(10)
+			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
 
 			Config.upstreams = append(Config.upstreams, upstream)
