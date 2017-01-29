@@ -39,9 +39,10 @@ func websocketHandler(ws *websocket.Conn) {
 			r := make([]byte, 1024)
 			len, err := ws.Read(r)
 			if err == nil && len > 0 {
-				client.Log(1, "client->: %s", string(r))
+				message := string(r[:len])
+				client.Log(1, "client->: %s", message)
 				select {
-				case client.Recv <- string(r):
+				case client.Recv <- message:
 				default:
 					client.Log(3, "Recv queue full. Dropping data")
 					// TODO: Should this really just drop the data or close the connection?
