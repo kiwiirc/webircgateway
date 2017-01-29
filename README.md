@@ -20,7 +20,7 @@ Included is a `webircgateway.sh` helper file to wrap building and running the pr
 * `./webircgateway.sh run` will run the project from sources
 
 ### Running
-Once compiled and you have a config file set, run `./websocketgateway --config=config.conf` to start the gateway server. You may reload the configuration file without any downtime by sending SIGHUP to the process.
+Once compiled and you have a config file set, run `./websocketgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
 
 ### TODO
 Several TODO items are added to the Github issue tracker.
