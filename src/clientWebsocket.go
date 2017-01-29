@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/websocket"
@@ -24,7 +25,8 @@ func websocketHandler(ws *websocket.Conn) {
 	if err != nil {
 		client.remoteHostname = client.remoteAddr
 	} else {
-		client.remoteHostname = clientHostnames[0]
+		// FQDNs include a . at the end. Strip it out
+		client.remoteHostname = strings.Trim(clientHostnames[0], ".")
 	}
 
 	client.Log(2, "New client from %s %s", client.remoteAddr, client.remoteHostname)
