@@ -82,7 +82,6 @@ func (c *Client) connectUpstream() {
 	}
 
 	upstreamTimeout := time.Second * time.Duration(upstreamConfig.Timeout)
-	upstreamThrottle := time.Duration(int64(time.Second) / int64(upstreamConfig.Throttle))
 	upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
 
 	dialer := net.Dialer{}
@@ -119,6 +118,13 @@ func (c *Client) connectUpstream() {
 
 	// Data from client to upstream
 	go func() {
+		var writeThrottle time.Duration
+		if upstreamConfig.Throttle > 0 {
+			writeThrottle = time.Duration(int64(time.Second) / int64(upstreamConfig.Throttle))
+		} else {
+			writeThrottle = 0
+		}
+
 		for {
 			data, ok := <-client.Recv
 			if !ok {
@@ -135,8 +141,9 @@ func (c *Client) connectUpstream() {
 
 			client.Log(1, "->upstream: %s", line)
 			upstream.Write([]byte(line + "\n"))
-			if upstreamThrottle > 0 {
-				time.Sleep(upstreamThrottle)
+
+			if writeThrottle > 0 {
+				time.Sleep(writeThrottle)
 			}
 		}
 
