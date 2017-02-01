@@ -68,7 +68,19 @@ func startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
 	if conf.TLS {
-		//go http.ListenAndServeTLS(addr, certFile, keyFile, nil)
+		if conf.CertFile == "" || conf.KeyFile == "" {
+			log.Println("'cert' and 'key' options must be set for TLS servers")
+			return
+		}
+
+		tlsCert := ConfigResolvePath(conf.CertFile)
+		tlsKey := ConfigResolvePath(conf.KeyFile)
+
+		log.Printf("Listening with TLS on %s", addr)
+		err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, nil)
+		if err != nil {
+			log.Printf("Failed to listen with TLS: %s", err.Error())
+		}
 	} else {
 		log.Printf("Listening on %s", addr)
 		err := http.ListenAndServe(addr, nil)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/ini.v1"
@@ -21,6 +22,8 @@ type ConfigServer struct {
 	LocalAddr string
 	Port      int
 	TLS       bool
+	CertFile  string
+	KeyFile   string
 }
 
 // Config - Config options for the running app
@@ -32,6 +35,18 @@ var Config struct {
 	serverEngines  []string
 	clientRealname string
 	clientUsername string
+}
+
+// ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
+func ConfigResolvePath(path string) string {
+	// Absolute paths should stay as they are
+	if path[0:1] == "/" {
+		return path
+	}
+
+	resolved := filepath.Dir(Config.configFile)
+	resolved = filepath.Clean(resolved + "/" + path)
+	return resolved
 }
 
 func loadConfig() error {
@@ -64,6 +79,8 @@ func loadConfig() error {
 			server.LocalAddr = section.Key("bind").MustString("127.0.0.1")
 			server.Port = section.Key("port").MustInt(80)
 			server.TLS = section.Key("tls").MustBool(false)
+			server.CertFile = section.Key("cert").MustString("")
+			server.KeyFile = section.Key("key").MustString("")
 
 			Config.servers = append(Config.servers, server)
 		}
