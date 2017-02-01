@@ -31,6 +31,7 @@ func main() {
 	}
 
 	watchForSignals()
+	maybeStartStaticFileServer()
 	initListenerEngines()
 	startServers()
 
@@ -55,6 +56,14 @@ func initListenerEngines() {
 
 	if !engineConfigured {
 		log.Fatal("No server engines configured")
+	}
+}
+
+func maybeStartStaticFileServer() {
+	if Config.webroot != "" {
+		webroot := ConfigResolvePath(Config.webroot)
+		log.Printf("Serving files from %s", webroot)
+		http.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
 }
 

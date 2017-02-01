@@ -33,6 +33,7 @@ var Config struct {
 	upstreams      []ConfigUpstream
 	servers        []ConfigServer
 	serverEngines  []string
+	webroot        string
 	clientRealname string
 	clientUsername string
 }
@@ -59,6 +60,7 @@ func loadConfig() error {
 	Config.upstreams = []ConfigUpstream{}
 	Config.servers = []ConfigServer{}
 	Config.serverEngines = []string{}
+	Config.webroot = ""
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
@@ -72,6 +74,12 @@ func loadConfig() error {
 		if strings.Index(section.Name(), "clients") == 0 {
 			Config.clientUsername = section.Key("username").MustString("")
 			Config.clientRealname = section.Key("realname").MustString("")
+		}
+
+		if strings.Index(section.Name(), "fileserving") == 0 {
+			if section.Key("enabled").MustBool(false) {
+				Config.webroot = section.Key("webroot").MustString("")
+			}
 		}
 
 		if strings.Index(section.Name(), "server.") == 0 {
