@@ -1,5 +1,5 @@
 # 1 = Debug; 2 = Info; 3 = Warn;
-logLevel = 2
+logLevel = 3
 
 [clients]
 # Default username / realname for IRC connections. If disabled it will use
@@ -9,6 +9,7 @@ logLevel = 2
 #username = "%i"
 #realname = "I am a webchat user"
 
+# The websockt / http server
 [server.1]
 bind = "0.0.0.0"
 port = 80
@@ -21,9 +22,16 @@ port = 80
 #cert = server.crt
 #key = server.key
 
+# Serve static files from a web root folder.
+# Optional, but handy for serving the Kiwi IRC client if no other webserver is available
+[fileserving]
+enabled = false
+webroot = www/
+
 [engines]
 websocket
 sockjs
+kiwiirc
 
 # Connections will be sent to a random upstream
 [upstream.1]
@@ -35,3 +43,16 @@ timeout = 5
 # Throttle the lines being written by X per second
 throttle = 2
 webirc = ""
+
+
+# A gateway to any IRC network
+# If enabled, Kiwi IRC clients may connect to any IRC network through the kiwiirc engine
+[gateway]
+enabled = false
+timeout = 5
+throttle = 2
+
+
+[gateway.webirc]
+irc.network.org = webirc_password
+irc.network2.org = webirc_password
