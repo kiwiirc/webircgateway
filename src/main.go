@@ -43,6 +43,9 @@ func initListenerEngines() {
 	engineConfigured := false
 	for _, serverEngine := range Config.serverEngines {
 		switch serverEngine {
+		case "kiwiirc":
+			kiwiircHTTPHandler()
+			engineConfigured = true
 		case "websocket":
 			websocketHTTPHandler()
 			engineConfigured = true

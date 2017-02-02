@@ -121,8 +121,9 @@ func (c *Client) connectUpstream() {
 		upstreamConfig.Hostname = client.destHost
 		upstreamConfig.Port = client.destPort
 		upstreamConfig.TLS = client.destTLS
-		upstreamConfig.Timeout = 5
-		upstreamConfig.Throttle = 2
+		upstreamConfig.Timeout = Config.gatewayTimeout
+		upstreamConfig.Throttle = Config.gatewayThrottle
+		upstreamConfig.WebircPassword = findWebircPassword(client.destHost)
 	}
 
 	dialer := net.Dialer{}
@@ -268,4 +269,13 @@ func ipv4ToHex(ip string) string {
 	}
 
 	return strings.Join(parts, "")
+}
+
+func findWebircPassword(ircHost string) string {
+	pass, exists := Config.gatewayWebircPassword[strings.ToLower(ircHost)]
+	if !exists {
+		pass = ""
+	}
+
+	return pass
 }

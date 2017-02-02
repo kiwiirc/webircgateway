@@ -28,14 +28,18 @@ type ConfigServer struct {
 
 // Config - Config options for the running app
 var Config struct {
-	configFile     string
-	logLevel       int
-	upstreams      []ConfigUpstream
-	servers        []ConfigServer
-	serverEngines  []string
-	webroot        string
-	clientRealname string
-	clientUsername string
+	configFile            string
+	logLevel              int
+	gateway               bool
+	gatewayThrottle       int
+	gatewayTimeout        int
+	gatewayWebircPassword map[string]string
+	upstreams             []ConfigUpstream
+	servers               []ConfigServer
+	serverEngines         []string
+	webroot               string
+	clientRealname        string
+	clientUsername        string
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -57,6 +61,8 @@ func loadConfig() error {
 	}
 
 	// Clear the existing config
+	Config.gateway = false
+	Config.gatewayWebircPassword = make(map[string]string)
 	Config.upstreams = []ConfigUpstream{}
 	Config.servers = []ConfigServer{}
 	Config.serverEngines = []string{}
@@ -68,6 +74,18 @@ func loadConfig() error {
 			if Config.logLevel < 1 || Config.logLevel > 3 {
 				log.Println("Config option logLevel must be between 1-3. Setting default value of 3.")
 				Config.logLevel = 3
+			}
+		}
+
+		if section.Name() == "gateway" {
+			Config.gateway = section.Key("enabled").MustBool(false)
+			Config.gatewayTimeout = section.Key("timeout").MustInt(10)
+			Config.gatewayThrottle = section.Key("throttle").MustInt(2)
+		}
+
+		if section.Name() == "gateway.webirc" {
+			for _, serverAddr := range section.KeyStrings() {
+				Config.gatewayWebircPassword[serverAddr] = section.Key(serverAddr).MustString("")
 			}
 		}
 
