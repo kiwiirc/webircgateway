@@ -6,10 +6,12 @@ Simple websocket gateway to IRC networks for web clients
 * Multiple websocket engine support
     * Websockets
     * SockJS
+    * Kiwi IRC multi-servers
 * Multiple upstream IRC servers in a round robin fashion
 * WEBIRC support
 * Static username and realname values
 * Hexed IP in the username and realname fields
+* Optional serving of static files over HTTP
 
 ### Building and development
 webircgateway is built using golang - make sure to have this installed and configured first!
