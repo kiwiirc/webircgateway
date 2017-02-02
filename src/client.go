@@ -15,27 +15,34 @@ import (
 
 // Client - Connecting client struct
 type Client struct {
-	id             int
-	Recv           chan string
-	Send           chan string
-	signalClose    chan string
-	remoteAddr     string
-	remoteHostname string
-	remotePort     int
+	id              int
+	ShuttingDown    bool
+	Recv            chan string
+	Send            chan string
+	signalClose     chan string
+	upstreamSignals chan string
+	UpstreamStarted bool
+	remoteAddr      string
+	remoteHostname  string
+	remotePort      int
+	destHost        string
+	destPort        int
+	destTLS         bool
 }
 
 var nextClientID = 1
 
 // NewClient - Makes a new client
-func NewClient() Client {
+func NewClient() *Client {
 	thisID := nextClientID
 	nextClientID++
 
-	c := Client{
-		id:          thisID,
-		Recv:        make(chan string, 50),
-		Send:        make(chan string, 50),
-		signalClose: make(chan string),
+	c := &Client{
+		id:              thisID,
+		Recv:            make(chan string, 50),
+		Send:            make(chan string, 50),
+		signalClose:     make(chan string),
+		upstreamSignals: make(chan string),
 	}
 	return c
 }
@@ -48,6 +55,27 @@ func (c *Client) Log(level int, format string, args ...interface{}) {
 
 	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
 	log.Printf("%s client:%d %s", levels[level-1], c.id, fmt.Sprintf(format, args...))
+}
+
+func (c *Client) StartShutdown(reason string) {
+	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.ShuttingDown)
+	if !c.ShuttingDown {
+		c.ShuttingDown = true
+		c.signalClose <- reason
+		close(c.signalClose)
+		close(c.upstreamSignals)
+	}
+}
+
+func (c *Client) UpstreamSignal(signal string) {
+	c.Log(1, "UpstreamSignal(%s) ShuttingDown=%t", signal, c.ShuttingDown)
+	if !c.ShuttingDown {
+		// Not all client transports listen for upstream signals, so don't block waiting
+		select {
+		case c.upstreamSignals <- signal:
+		default:
+		}
+	}
 }
 
 // Handle - Handle the lifetime of the client
@@ -74,31 +102,48 @@ func (c *Client) Handle() {
 func (c *Client) connectUpstream() {
 	client := c
 
-	upstreamConfig, err := findUpstream()
-	if err != nil {
-		client.Log(3, "No upstreams available")
-		client.signalClose <- "err_no_upstream"
-		return
-	}
+	c.UpstreamStarted = true
 
-	upstreamTimeout := time.Second * time.Duration(upstreamConfig.Timeout)
-	upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
+	var upstreamConfig ConfigUpstream
+
+	if client.destHost == "" {
+		log.Println("Using pre-set upstream")
+		var err error
+		upstreamConfig, err = findUpstream()
+		if err != nil {
+			client.Log(3, "No upstreams available")
+			client.StartShutdown("err_no_upstream")
+			return
+		}
+	} else {
+		log.Println("Using client given upstream")
+		upstreamConfig = ConfigUpstream{}
+		upstreamConfig.Hostname = client.destHost
+		upstreamConfig.Port = client.destPort
+		upstreamConfig.TLS = client.destTLS
+		upstreamConfig.Timeout = 5
+		upstreamConfig.Throttle = 2
+	}
 
 	dialer := net.Dialer{}
-	dialer.Timeout = upstreamTimeout
+	dialer.Timeout = time.Second * time.Duration(upstreamConfig.Timeout)
 
+	upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
 	var upstream net.Conn
+	var connErr error
 
 	if upstreamConfig.TLS {
-		upstream, err = tls.DialWithDialer(&dialer, "tcp", upstreamStr, nil)
+		upstream, connErr = tls.DialWithDialer(&dialer, "tcp", upstreamStr, nil)
 
 	} else {
-		upstream, err = dialer.Dial("tcp", upstreamStr)
+		upstream, connErr = dialer.Dial("tcp", upstreamStr)
 	}
 
-	if err != nil {
-		client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
-		client.signalClose <- "err_connecting_upstream"
+	if connErr != nil {
+		client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
+		client.UpstreamSignal("closed")
+		close(client.Send)
+		client.StartShutdown("err_connecting_upstream")
 		return
 	}
 
@@ -115,6 +160,8 @@ func (c *Client) connectUpstream() {
 	} else {
 		client.Log(1, "No webirc to send")
 	}
+
+	client.UpstreamSignal("connected")
 
 	// Data from client to upstream
 	go func() {
@@ -135,12 +182,12 @@ func (c *Client) connectUpstream() {
 			// Some IRC lines such as USER commands may have some parameter replacements
 			line, err := clientLineReplacements(*client, data)
 			if err != nil {
-				client.signalClose <- "invalid_client_line"
+				client.StartShutdown("invalid_client_line")
 				break
 			}
 
 			client.Log(1, "->upstream: %s", line)
-			upstream.Write([]byte(line + "\n"))
+			upstream.Write([]byte(line + "\r\n"))
 
 			if writeThrottle > 0 {
 				time.Sleep(writeThrottle)
@@ -163,8 +210,9 @@ func (c *Client) connectUpstream() {
 			client.Send <- data
 		}
 
+		client.UpstreamSignal("closed")
+		client.StartShutdown("upstream_closed")
 		close(client.Send)
-		client.signalClose <- "upstream_closed"
 		upstream.Close()
 	}()
 }

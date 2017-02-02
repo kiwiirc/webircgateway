@@ -11,7 +11,7 @@ import (
 )
 
 func websocketHTTPHandler() {
-	http.Handle("/", websocket.Handler(websocketHandler))
+	http.Handle("/webirc/websocket/", websocket.Handler(websocketHandler))
 }
 
 func websocketHandler(ws *websocket.Conn) {
@@ -60,7 +60,7 @@ func websocketHandler(ws *websocket.Conn) {
 		}
 
 		close(client.Recv)
-		client.signalClose <- "client_closed"
+		client.StartShutdown("client_closed")
 	}()
 
 	// Write to websocket

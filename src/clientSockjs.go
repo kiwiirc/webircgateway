@@ -5,13 +5,14 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
 )
 
 func sockjsHTTPHandler() {
 	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, sockjsHandler)
-	http.Handle("/webirc/sockjs", sockjsHandler)
+	http.Handle("/webirc/sockjs/", sockjsHandler)
 }
 
 func sockjsHandler(session sockjs.Session) {
@@ -25,7 +26,8 @@ func sockjsHandler(session sockjs.Session) {
 	if err != nil {
 		client.remoteHostname = client.remoteAddr
 	} else {
-		client.remoteHostname = clientHostnames[0]
+		// FQDNs include a . at the end. Strip it out
+		client.remoteHostname = strings.Trim(clientHostnames[0], ".")
 	}
 
 	client.Log(2, "New client from %s %s", client.remoteAddr, client.remoteHostname)
@@ -50,7 +52,8 @@ func sockjsHandler(session sockjs.Session) {
 			}
 		}
 
-		client.signalClose <- "client_closed"
+		close(client.Recv)
+		client.StartShutdown("client_closed")
 	}()
 
 	// Write to sockjs
