@@ -1,13 +1,14 @@
 # webircgateway
-Simple websocket gateway to IRC networks for web clients
+Simple http/websocket gateway to IRC networks for web clients
 
 ### Overview
 * Multiple servers, non-tls / tls / multiple ports
 * Multiple websocket engine support
-    * Websockets
-    * SockJS
-    * Kiwi IRC multi-servers
+    * Websockets (/webirc/websocket/)
+    * SockJS (/webirc/sockjs/)
+    * Kiwi IRC multi-servers (/webirc/kiwi/)
 * Multiple upstream IRC servers in a round robin fashion
+* Optional support for "HOST irc.net.org:6667" from clients to connect to any IRCd
 * WEBIRC support
 * Static username and realname values
 * Hexed IP in the username and realname fields
@@ -28,6 +29,8 @@ Once compiled and you have a config file set, run `./websocketgateway --config=c
 Several TODO items are added to the Github issue tracker.
 * Pre-built binaries
 * Documentation on how best to distribute and handle configuration files
+* Encoding/decoding to the IRCd while keeping UTF8 to the websocket clients
+* IdentD support (Ideally the IRCd should disable IdentD lookups for web clients as it's pointless)
 
 ### License
 ~~~
