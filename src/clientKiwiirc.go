@@ -149,8 +149,8 @@ func (c *Channel) lineWriter() {
 }
 
 func kiwiircHTTPHandler() {
-	handler := sockjs.NewHandler("/webirc/channelled", sockjs.DefaultOptions, kiwiircHandler)
-	http.Handle("/webirc/channelled/", handler)
+	handler := sockjs.NewHandler("/webirc/kiwiirc", sockjs.DefaultOptions, kiwiircHandler)
+	http.Handle("/webirc/kiwiirc/", handler)
 }
 
 func kiwiircHandler(session sockjs.Session) {
