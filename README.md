@@ -1,6 +1,8 @@
 # webircgateway
 Simple http/websocket gateway to IRC networks for web clients
 
+*Pre-built binaries can be downloaded from https://kiwiirc.com/downloads/index.html*
+
 ### Overview
 Most IRC networks currently do not support websocket connections or will only support native websockets. This causes problems:
 * Not all browsers support websockets
