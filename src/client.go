@@ -133,12 +133,7 @@ func (c *Client) connectUpstream() {
 	var upstream net.Conn
 	var connErr error
 
-	if upstreamConfig.TLS {
-		upstream, connErr = tls.DialWithDialer(&dialer, "tcp", upstreamStr, nil)
-
-	} else {
-		upstream, connErr = dialer.Dial("tcp", upstreamStr)
-	}
+	upstream, connErr = dialer.Dial("tcp", upstreamStr)
 
 	if connErr != nil {
 		client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
@@ -146,6 +141,21 @@ func (c *Client) connectUpstream() {
 		close(client.Send)
 		client.StartShutdown("err_connecting_upstream")
 		return
+	}
+
+	if upstreamConfig.TLS {
+		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		tlsConn := tls.Client(upstream, tlsConfig)
+		err := tlsConn.Handshake()
+		if err != nil {
+			client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
+			client.UpstreamSignal("closed")
+			close(client.Send)
+			client.StartShutdown("err_connecting_upstream")
+			return
+		}
+
+		upstream = net.Conn(tlsConn)
 	}
 
 	// Send any WEBIRC lines
