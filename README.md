@@ -46,6 +46,7 @@ To ensure web clients can connect to your network and to try keep some consisten
 3. Configure WEBIRC for your IRC servers. This will show the users correct hostname on your network so that bans work.
 4. Treat IRC connections made from webircgateway the same as any other IRC connection. Ban evasion and other difficulties arise when networks change web users hostnames / idents. If you must, try setting the users realname field instead.
 5. If your network uses `irc.network.org`, use `ws.network.org` to point to your webircgateway.
+6. Although available, disable identd lookups for webircgateway clients. There are no benefits while potentially slowing the connection down.
 
 ### TODO
 Several TODO items are added to the Github issue tracker.
