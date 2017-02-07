@@ -32,7 +32,7 @@ func (i *IdentdServer) RemoveIdent(localPort, remotePort int) {
 }
 
 func (i *IdentdServer) Run() error {
-	serv, err := net.Listen("tcp", ":2113")
+	serv, err := net.Listen("tcp", ":113")
 	if err != nil {
 		return err
 	}
