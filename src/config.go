@@ -40,6 +40,7 @@ var Config struct {
 	webroot               string
 	clientRealname        string
 	clientUsername        string
+	identd                bool
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -75,6 +76,8 @@ func loadConfig() error {
 				log.Println("Config option logLevel must be between 1-3. Setting default value of 3.")
 				Config.logLevel = 3
 			}
+
+			Config.identd = section.Key("identd").MustBool(false)
 		}
 
 		if section.Name() == "gateway" {

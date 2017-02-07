@@ -1,6 +1,9 @@
 # 1 = Debug; 2 = Info; 3 = Warn;
 logLevel = 3
 
+# Enable the built in identd server (listens on port 113)
+identd = false
+
 [clients]
 # Default username / realname for IRC connections. If disabled it will use
 # the values provided from the RC client itself.

@@ -34,6 +34,7 @@ func main() {
 	maybeStartStaticFileServer()
 	initListenerEngines()
 	startServers()
+	maybeStartIdentd()
 
 	justWait := make(chan bool)
 	<-justWait
@@ -59,6 +60,19 @@ func initListenerEngines() {
 
 	if !engineConfigured {
 		log.Fatal("No server engines configured")
+	}
+}
+
+func maybeStartIdentd() {
+	identd = NewIdentdServer()
+
+	if Config.identd {
+		err := identd.Run()
+		if err != nil {
+			log.Printf("Error starting identd server: %s", err.Error())
+		} else {
+			log.Printf("Identd server started")
+		}
 	}
 }
 

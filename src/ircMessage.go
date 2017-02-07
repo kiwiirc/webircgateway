@@ -19,6 +19,12 @@ type IrcMessage struct {
 	Params  []string
 }
 
+type IrcState struct {
+	LocalPort  int
+	RemotePort int
+	Username   string
+}
+
 func ircCreateMask(maskStr string) *IrcMask {
 	mask := &IrcMask{
 		Mask: maskStr,

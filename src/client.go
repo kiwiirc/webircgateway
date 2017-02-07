@@ -19,6 +19,7 @@ type Client struct {
 	ShuttingDown    bool
 	Recv            chan string
 	Send            chan string
+	UpstreamSend    chan string
 	signalClose     chan string
 	upstreamSignals chan string
 	UpstreamStarted bool
@@ -28,6 +29,7 @@ type Client struct {
 	destHost        string
 	destPort        int
 	destTLS         bool
+	ircState        IrcState
 }
 
 var nextClientID = 1
@@ -41,6 +43,7 @@ func NewClient() *Client {
 		id:              thisID,
 		Recv:            make(chan string, 50),
 		Send:            make(chan string, 50),
+		UpstreamSend:    make(chan string, 50),
 		signalClose:     make(chan string),
 		upstreamSignals: make(chan string),
 	}
@@ -80,9 +83,8 @@ func (c *Client) UpstreamSignal(signal string) {
 
 // Handle - Handle the lifetime of the client
 func (c *Client) Handle() {
-	// Start a goroutine here as connecting upstream is blocking. client.SignalClose will
-	// catch any reasons to stop
-	go c.connectUpstream()
+
+	go c.clientLineWorker()
 
 	closeReason := <-c.signalClose
 
@@ -143,6 +145,18 @@ func (c *Client) connectUpstream() {
 		return
 	}
 
+	// Keep track of the upstreams local and remote port numbers
+	_, lPortStr, _ := net.SplitHostPort(upstream.LocalAddr().String())
+	client.ircState.LocalPort, _ = strconv.Atoi(lPortStr)
+	_, rPortStr, _ := net.SplitHostPort(upstream.RemoteAddr().String())
+	client.ircState.RemotePort, _ = strconv.Atoi(rPortStr)
+
+	// Add the ports into the identd before possible TLS handshaking. If we do it after then
+	// there's a good chance the identd lookup will occur before the handshake has finished
+	if Config.identd {
+		identd.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, "boo")
+	}
+
 	if upstreamConfig.TLS {
 		tlsConfig := &tls.Config{InsecureSkipVerify: true}
 		tlsConn := tls.Client(upstream, tlsConfig)
@@ -184,21 +198,14 @@ func (c *Client) connectUpstream() {
 		}
 
 		for {
-			data, ok := <-client.Recv
+			data, ok := <-client.UpstreamSend
 			if !ok {
-				client.Log(1, "connectUpstream() got error from channel")
+				client.Log(1, "connectUpstream() client.UpstreamSend closed")
 				break
 			}
 
-			// Some IRC lines such as USER commands may have some parameter replacements
-			line, err := clientLineReplacements(*client, data)
-			if err != nil {
-				client.StartShutdown("invalid_client_line")
-				break
-			}
-
-			client.Log(1, "->upstream: %s", line)
-			upstream.Write([]byte(line + "\r\n"))
+			client.Log(1, "->upstream: %s", data)
+			upstream.Write([]byte(data + "\r\n"))
 
 			if writeThrottle > 0 {
 				time.Sleep(writeThrottle)
@@ -225,7 +232,59 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("upstream_closed")
 		close(client.Send)
 		upstream.Close()
+
+		identd.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
 	}()
+}
+
+// Handle lines sent from the client
+func (c *Client) clientLineWorker() {
+	for {
+		data, ok := <-c.Recv
+		if !ok {
+			c.Log(1, "clientLineWorker() client.Recv closed")
+			break
+		}
+
+		// Some IRC lines such as USER commands may have some parameter replacements
+		line, err := c.ProcesIncomingLine(data)
+		if err == nil && line != "" {
+			c.UpstreamSend <- line
+		}
+	}
+
+	close(c.UpstreamSend)
+}
+
+// ProcesIncomingLine - Processes and makes any changes to a line of data sent from a client
+func (c *Client) ProcesIncomingLine(line string) (string, error) {
+	// USER <username> <hostname> <servername> <realname>
+	if strings.HasPrefix(line, "USER") {
+		parts := strings.Split(line, " ")
+		if len(parts) < 5 {
+			return line, errors.New("Invalid USER line")
+		}
+
+		if Config.clientUsername != "" {
+			parts[1] = Config.clientUsername
+			parts[1] = strings.Replace(parts[1], "%i", ipv4ToHex(c.remoteAddr), -1)
+			parts[1] = strings.Replace(parts[1], "%h", c.remoteHostname, -1)
+		}
+		if Config.clientRealname != "" {
+			parts[4] = ":" + Config.clientRealname
+			parts[4] = strings.Replace(parts[4], "%i", ipv4ToHex(c.remoteAddr), -1)
+			parts[4] = strings.Replace(parts[4], "%h", c.remoteHostname, -1)
+			// We've just set the realname (final param 4) so remove everything else after it
+			parts = parts[:5]
+		}
+
+		line = strings.Join(parts, " ")
+
+		c.ircState.Username = parts[1]
+		go c.connectUpstream()
+	}
+
+	return line, nil
 }
 
 func findUpstream() (ConfigUpstream, error) {
@@ -239,33 +298,6 @@ func findUpstream() (ConfigUpstream, error) {
 	ret = Config.upstreams[randIdx]
 
 	return ret, nil
-}
-
-func clientLineReplacements(client Client, line string) (string, error) {
-	// USER <username> <hostname> <servername> <realname>
-	if strings.HasPrefix(line, "USER") {
-		parts := strings.Split(line, " ")
-		if len(parts) < 5 {
-			return line, errors.New("Invalid USER line")
-		}
-
-		if Config.clientUsername != "" {
-			parts[1] = Config.clientUsername
-			parts[1] = strings.Replace(parts[1], "%i", ipv4ToHex(client.remoteAddr), -1)
-			parts[1] = strings.Replace(parts[1], "%h", client.remoteHostname, -1)
-		}
-		if Config.clientRealname != "" {
-			parts[4] = ":" + Config.clientRealname
-			parts[4] = strings.Replace(parts[4], "%i", ipv4ToHex(client.remoteAddr), -1)
-			parts[4] = strings.Replace(parts[4], "%h", client.remoteHostname, -1)
-			// We've just set the realname (final param 4) so remove everything else after it
-			parts = parts[:5]
-		}
-
-		line = strings.Join(parts, " ")
-	}
-
-	return line, nil
 }
 
 func ipv4ToHex(ip string) string {
