@@ -1,32 +1,26 @@
-package main
+package irc
 
 import (
 	"errors"
 	"strings"
 )
 
-type IrcMask struct {
+type Mask struct {
 	Nick     string
 	Username string
 	Hostname string
 	Mask     string
 }
-type IrcMessage struct {
+type Message struct {
 	Raw     string
 	Tags    map[string]string
-	Prefix  *IrcMask
+	Prefix  *Mask
 	Command string
 	Params  []string
 }
 
-type IrcState struct {
-	LocalPort  int
-	RemotePort int
-	Username   string
-}
-
-func ircCreateMask(maskStr string) *IrcMask {
-	mask := &IrcMask{
+func createMask(maskStr string) *Mask {
+	mask := &Mask{
 		Mask: maskStr,
 	}
 
@@ -50,9 +44,9 @@ func ircCreateMask(maskStr string) *IrcMask {
 	return mask
 }
 
-// ircParseLine - Turn a raw IRC line into a message
-func ircParseLine(line string) (*IrcMessage, error) {
-	message := &IrcMessage{
+// ParseLine - Turn a raw IRC line into a message
+func ParseLine(line string) (*Message, error) {
+	message := &Message{
 		Raw:  line,
 		Tags: make(map[string]string),
 	}
@@ -60,7 +54,7 @@ func ircParseLine(line string) (*IrcMessage, error) {
 	token := ""
 	rest := ""
 
-	token, rest = ircNextToken(line, false)
+	token, rest = nextToken(line, false)
 	if token == "" {
 		return nil, errors.New("Empty line")
 	}
@@ -78,13 +72,13 @@ func ircParseLine(line string) (*IrcMessage, error) {
 			}
 		}
 
-		token, rest = ircNextToken(rest, false)
+		token, rest = nextToken(rest, false)
 	}
 
 	// Prefix. Starts with ":"
 	if token != "" && token[0] == 58 {
-		message.Prefix = ircCreateMask(token[1:])
-		token, rest = ircNextToken(rest, false)
+		message.Prefix = createMask(token[1:])
+		token, rest = nextToken(rest, false)
 	}
 
 	// Command
@@ -96,7 +90,7 @@ func ircParseLine(line string) (*IrcMessage, error) {
 
 	// Params
 	for {
-		token, rest = ircNextToken(rest, true)
+		token, rest = nextToken(rest, true)
 		if token == "" {
 			break
 		}
@@ -107,7 +101,7 @@ func ircParseLine(line string) (*IrcMessage, error) {
 	return message, nil
 }
 
-func ircNextToken(s string, allowTrailing bool) (string, string) {
+func nextToken(s string, allowTrailing bool) (string, string) {
 	s = strings.TrimLeft(s, " ")
 
 	if len(s) == 0 {

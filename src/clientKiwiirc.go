@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"webircgateway/irc"
 
 	"github.com/igm/sockjs-go/sockjs"
 )
@@ -78,7 +79,7 @@ func (c *Channel) Start() {
 }
 
 func (c *Channel) handleIncomingLine(line string) {
-	message, err := ircParseLine(line)
+	message, err := irc.ParseLine(line)
 
 	// Just pass any random data upstream
 	if err != nil {

@@ -2,6 +2,10 @@
 
 # Helper to run and build webircgateway
 
+# We have some internal packages under ./pkg
+ROOTPATH=$( cd $(dirname $0) ; pwd )
+GOPATH=$ROOTPATH/pkg:$GOPATH
+
 case "$1" in
         prepare)
                 echo Downloading dependency: github.com/igm/sockjs-go/sockjs
@@ -16,13 +20,13 @@ case "$1" in
         build)
                 echo Building webircgateway..
                 rm -f ./webircgateway
-                go build -o webircgateway src/*.go
+                go build -o webircgateway $ROOTPATH/src/*.go
                 chmod +x ./webircgateway
                 ls -lh ./webircgateway
                 ;;
 
         run)
-                go run src/*.go "${@:2}"
+                go run $ROOTPATH/src/*.go "${@:2}"
                 ;;
 
         *)

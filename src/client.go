@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"webircgateway/irc"
 )
 
 // Client - Connecting client struct
@@ -29,7 +30,7 @@ type Client struct {
 	destHost        string
 	destPort        int
 	destTLS         bool
-	ircState        IrcState
+	ircState        irc.State
 }
 
 var nextClientID = 1
