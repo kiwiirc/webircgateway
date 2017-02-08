@@ -1,4 +1,4 @@
-package main
+package identd
 
 import (
 	"fmt"
@@ -7,31 +7,35 @@ import (
 	"sync"
 )
 
-var identd IdentdServer
-
-type IdentdServer struct {
+// Server - An IdentD server
+type Server struct {
 	Entries     map[string]string
 	EntriesLock sync.Mutex
 }
 
-func NewIdentdServer() IdentdServer {
-	return IdentdServer{
+// NewIdentdServer - Create a new IdentdServer instance
+func NewIdentdServer() Server {
+	return Server{
 		Entries: make(map[string]string),
 	}
 }
 
-func (i *IdentdServer) AddIdent(localPort, remotePort int, ident string) {
+// AddIdent - Add an ident to be looked up
+func (i *Server) AddIdent(localPort, remotePort int, ident string) {
 	i.EntriesLock.Lock()
 	i.Entries[fmt.Sprintf("%d-%d", localPort, remotePort)] = ident
 	i.EntriesLock.Unlock()
 }
-func (i *IdentdServer) RemoveIdent(localPort, remotePort int) {
+
+// RemoveIdent - Remove an ident from being looked up
+func (i *Server) RemoveIdent(localPort, remotePort int) {
 	i.EntriesLock.Lock()
 	delete(i.Entries, fmt.Sprintf("%d-%d", localPort, remotePort))
 	i.EntriesLock.Unlock()
 }
 
-func (i *IdentdServer) Run() error {
+// Run - Start listening for ident lookups
+func (i *Server) Run() error {
 	serv, err := net.Listen("tcp", ":113")
 	if err != nil {
 		return err
@@ -41,7 +45,8 @@ func (i *IdentdServer) Run() error {
 	return nil
 }
 
-func (i *IdentdServer) ListenForRequests(serverSocket *net.Listener) {
+// ListenForRequests - Listen on a net.Listener for ident lookups
+func (i *Server) ListenForRequests(serverSocket *net.Listener) {
 	for {
 		serv := *serverSocket
 		client, err := serv.Accept()

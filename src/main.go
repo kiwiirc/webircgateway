@@ -9,7 +9,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"webircgateway/identd"
 )
+
+var identdServ identd.Server
 
 func main() {
 	configFile := flag.String("config", "config.conf", "Config file location")
@@ -64,10 +67,10 @@ func initListenerEngines() {
 }
 
 func maybeStartIdentd() {
-	identd = NewIdentdServer()
+	identdServ = identd.NewIdentdServer()
 
 	if Config.identd {
-		err := identd.Run()
+		err := identdServ.Run()
 		if err != nil {
 			log.Printf("Error starting identd server: %s", err.Error())
 		} else {

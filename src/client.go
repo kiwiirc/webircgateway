@@ -155,7 +155,7 @@ func (c *Client) connectUpstream() {
 	// Add the ports into the identd before possible TLS handshaking. If we do it after then
 	// there's a good chance the identd lookup will occur before the handshake has finished
 	if Config.identd {
-		identd.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, "boo")
+		identdServ.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, "boo")
 	}
 
 	if upstreamConfig.TLS {
@@ -234,7 +234,7 @@ func (c *Client) connectUpstream() {
 		close(client.Send)
 		upstream.Close()
 
-		identd.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
+		identdServ.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
 	}()
 }
 
