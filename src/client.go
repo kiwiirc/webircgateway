@@ -259,29 +259,32 @@ func (c *Client) clientLineWorker() {
 
 // ProcesIncomingLine - Processes and makes any changes to a line of data sent from a client
 func (c *Client) ProcesIncomingLine(line string) (string, error) {
+	message, err := irc.ParseLine(line)
+	// Just pass any random data upstream
+	if err != nil {
+		return line, nil
+	}
+
 	// USER <username> <hostname> <servername> <realname>
-	if strings.HasPrefix(line, "USER") {
-		parts := strings.Split(line, " ")
-		if len(parts) < 5 {
+	if message.Command == "USER" {
+		if len(message.Params) < 4 {
 			return line, errors.New("Invalid USER line")
 		}
 
 		if Config.clientUsername != "" {
-			parts[1] = Config.clientUsername
-			parts[1] = strings.Replace(parts[1], "%i", ipv4ToHex(c.remoteAddr), -1)
-			parts[1] = strings.Replace(parts[1], "%h", c.remoteHostname, -1)
+			message.Params[1] = Config.clientUsername
+			message.Params[1] = strings.Replace(message.Params[1], "%i", ipv4ToHex(c.remoteAddr), -1)
+			message.Params[1] = strings.Replace(message.Params[1], "%h", c.remoteHostname, -1)
 		}
 		if Config.clientRealname != "" {
-			parts[4] = ":" + Config.clientRealname
-			parts[4] = strings.Replace(parts[4], "%i", ipv4ToHex(c.remoteAddr), -1)
-			parts[4] = strings.Replace(parts[4], "%h", c.remoteHostname, -1)
-			// We've just set the realname (final param 4) so remove everything else after it
-			parts = parts[:5]
+			message.Params[4] = ":" + Config.clientRealname
+			message.Params[4] = strings.Replace(message.Params[4], "%i", ipv4ToHex(c.remoteAddr), -1)
+			message.Params[4] = strings.Replace(message.Params[4], "%h", c.remoteHostname, -1)
 		}
 
-		line = strings.Join(parts, " ")
+		line = message.ToLine()
 
-		c.ircState.Username = parts[1]
+		c.ircState.Username = message.Params[1]
 		go c.connectUpstream()
 	}
 

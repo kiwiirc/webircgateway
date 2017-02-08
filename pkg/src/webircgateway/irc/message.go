@@ -19,6 +19,66 @@ type Message struct {
 	Params  []string
 }
 
+// ToLine - Convert the Message struct to its raw IRC line
+func (m *Message) ToLine() string {
+	line := ""
+
+	if len(m.Tags) > 0 {
+		line += "@"
+
+		for tagName, tagVal := range m.Tags {
+			line += tagName
+			if tagVal != "" {
+				line += ":" + tagVal
+			}
+			line += ";"
+		}
+	}
+
+	if m.Prefix != nil {
+		prefix := ""
+
+		if m.Prefix.Nick != "" {
+			prefix += m.Prefix.Nick
+		}
+
+		if m.Prefix.Username != "" && m.Prefix.Nick != "" {
+			prefix += "!" + m.Prefix.Username
+		} else if m.Prefix.Username != "" {
+			prefix += m.Prefix.Username
+		}
+
+		if m.Prefix.Hostname != "" && prefix != "" {
+			prefix += "@" + m.Prefix.Username
+		} else if m.Prefix.Hostname != "" {
+			prefix += m.Prefix.Hostname
+		}
+
+		if line != "" {
+			line += " :" + prefix
+		} else {
+			line += ":" + prefix
+		}
+	}
+
+	if line != "" {
+		line += " " + m.Command
+	} else {
+		line += m.Command
+	}
+
+	paramLen := len(m.Params)
+	for idx, param := range m.Params {
+		if idx == paramLen-1 && strings.Contains(param, " ") {
+			line += " :" + param
+		} else {
+			line += " " + param
+		}
+	}
+
+	return line
+}
+
 func createMask(maskStr string) *Mask {
 	mask := &Mask{
 		Mask: maskStr,
