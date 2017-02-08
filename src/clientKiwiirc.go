@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"webircgateway/irc"
 
 	"github.com/igm/sockjs-go/sockjs"
 )
@@ -16,9 +15,6 @@ type Channel struct {
 	Conn         sockjs.Session
 	Client       *Client
 	Id           string
-	destHost     string
-	destPort     int
-	destTLS      bool
 	waitForClose chan bool
 }
 
@@ -48,6 +44,8 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 	}
 
 	go channel.lineWriter()
+	go channel.Start()
+
 	return &channel
 }
 
@@ -65,13 +63,6 @@ func (c *Channel) Start() {
 		}
 	}()
 
-	// If this channel is requesting a specific upstream host, set it now
-	if c.destHost != "" {
-		c.Client.destHost = c.destHost
-		c.Client.destPort = c.destPort
-		c.Client.destTLS = c.destTLS
-	}
-
 	c.Client.Handle()
 
 	close(c.Client.Recv)
@@ -79,58 +70,6 @@ func (c *Channel) Start() {
 }
 
 func (c *Channel) handleIncomingLine(line string) {
-	message, err := irc.ParseLine(line)
-
-	// Just pass any random data upstream
-	if err != nil {
-		c.Client.Recv <- line
-		return
-	}
-
-	if message.Command == "HOST" && !c.Client.UpstreamStarted {
-		// HOST irc.network.net:6667
-		// HOST irc.network.net:+6667
-
-		if !Config.gateway {
-			c.Conn.Send(fmt.Sprintf(":%s ERROR :Host forbidden", c.Id))
-			c.Client.StartShutdown("forbidden_host")
-			return
-		}
-
-		addr := message.Params[0]
-		if addr == "" {
-			c.Conn.Send(fmt.Sprintf(":%s ERROR :Missing host", c.Id))
-			c.Client.StartShutdown("missing_host")
-			return
-		}
-
-		// Parse host:+port into the c.dest* vars
-		portSep := strings.Index(addr, ":")
-		if portSep == -1 {
-			c.destHost = addr
-			c.destPort = 6667
-			c.destTLS = false
-		} else {
-			c.destHost = addr[0:portSep]
-			portParam := addr[portSep+1:]
-			if portParam[0:1] == "+" {
-				c.destTLS = true
-				c.destPort, err = strconv.Atoi(portParam[1:])
-				if err != nil {
-					c.destPort = 6697
-				}
-			} else {
-				c.destPort, err = strconv.Atoi(portParam[0:])
-				if err != nil {
-					c.destPort = 6667
-				}
-			}
-		}
-
-		go c.Start()
-		return
-	}
-
 	c.Client.Recv <- line
 }
 

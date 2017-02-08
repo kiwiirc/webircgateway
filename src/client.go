@@ -247,6 +247,8 @@ func (c *Client) clientLineWorker() {
 			break
 		}
 
+		c.Log(1, "ws->: %s", data)
+
 		// Some IRC lines such as USER commands may have some parameter replacements
 		line, err := c.ProcesIncomingLine(data)
 		if err == nil && line != "" {
@@ -286,6 +288,50 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		c.ircState.Username = message.Params[1]
 		go c.connectUpstream()
+	}
+
+	if message.Command == "HOST" && !c.UpstreamStarted {
+		// HOST irc.network.net:6667
+		// HOST irc.network.net:+6667
+
+		if !Config.gateway {
+			c.Send <- "ERROR :Host forbidden"
+			c.StartShutdown("forbidden_host")
+			return "", nil
+		}
+
+		addr := message.Params[0]
+		if addr == "" {
+			c.Send <- "ERROR :Missing host"
+			c.StartShutdown("missing_host")
+			return "", nil
+		}
+
+		// Parse host:+port into the c.dest* vars
+		portSep := strings.Index(addr, ":")
+		if portSep == -1 {
+			c.destHost = addr
+			c.destPort = 6667
+			c.destTLS = false
+		} else {
+			c.destHost = addr[0:portSep]
+			portParam := addr[portSep+1:]
+			if portParam[0:1] == "+" {
+				c.destTLS = true
+				c.destPort, err = strconv.Atoi(portParam[1:])
+				if err != nil {
+					c.destPort = 6697
+				}
+			} else {
+				c.destPort, err = strconv.Atoi(portParam[0:])
+				if err != nil {
+					c.destPort = 6667
+				}
+			}
+		}
+
+		// Don't send the HOST command upstream
+		return "", nil
 	}
 
 	return line, nil
