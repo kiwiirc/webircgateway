@@ -1,0 +1,6 @@
+.vscode
+.idea
+config.conf
+*.a
+*.crt
+*.key
