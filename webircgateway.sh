@@ -19,10 +19,11 @@ case "$1" in
 
         build)
                 echo Building webircgateway..
-                rm -f ./webircgateway
-                go build -o webircgateway $ROOTPATH/src/*.go
-                chmod +x ./webircgateway
-                ls -lh ./webircgateway
+                OUTFILE=${2:-webircgateway}
+                rm -f $OUTFILE
+                go build -o $OUTFILE $ROOTPATH/src/*.go
+                chmod +x $OUTFILE
+                ls -lh $OUTFILE
                 ;;
 
         run)
