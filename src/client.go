@@ -274,19 +274,19 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		}
 
 		if Config.clientUsername != "" {
-			message.Params[1] = Config.clientUsername
-			message.Params[1] = strings.Replace(message.Params[1], "%i", ipv4ToHex(c.remoteAddr), -1)
-			message.Params[1] = strings.Replace(message.Params[1], "%h", c.remoteHostname, -1)
+			message.Params[0] = Config.clientUsername
+			message.Params[0] = strings.Replace(message.Params[0], "%i", ipv4ToHex(c.remoteAddr), -1)
+			message.Params[0] = strings.Replace(message.Params[0], "%h", c.remoteHostname, -1)
 		}
 		if Config.clientRealname != "" {
-			message.Params[4] = ":" + Config.clientRealname
-			message.Params[4] = strings.Replace(message.Params[4], "%i", ipv4ToHex(c.remoteAddr), -1)
-			message.Params[4] = strings.Replace(message.Params[4], "%h", c.remoteHostname, -1)
+			message.Params[3] = Config.clientRealname
+			message.Params[3] = strings.Replace(message.Params[3], "%i", ipv4ToHex(c.remoteAddr), -1)
+			message.Params[3] = strings.Replace(message.Params[3], "%h", c.remoteHostname, -1)
 		}
 
 		line = message.ToLine()
 
-		c.ircState.Username = message.Params[1]
+		c.ircState.Username = message.Params[0]
 		go c.connectUpstream()
 	}
 
