@@ -137,7 +137,7 @@ func loadConfig() error {
 
 		if strings.Index(section.Name(), "allowed_origins") == 0 {
 			for _, origin := range section.KeyStrings() {
-				match, err := glob.Compile(glob.QuoteMeta(origin))
+				match, err := glob.Compile(origin)
 				if err != nil {
 					log.Println("Config section allowed_origins has invalid match, " + origin)
 					continue
