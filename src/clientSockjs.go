@@ -18,6 +18,13 @@ func sockjsHTTPHandler() {
 func sockjsHandler(session sockjs.Session) {
 	client := NewClient()
 
+	originHeader := strings.ToLower(session.Request().Header.Get("Origin"))
+	if !isClientOriginAllowed(originHeader) {
+		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
+		session.Close(0, "Origin not allowed")
+		return
+	}
+
 	remoteAddr, remotePort, _ := net.SplitHostPort(session.Request().RemoteAddr)
 	client.remoteAddr = remoteAddr
 	client.remotePort, _ = strconv.Atoi(remotePort)

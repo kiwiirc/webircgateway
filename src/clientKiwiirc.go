@@ -23,6 +23,13 @@ var nextChannelID int
 func makeChannel(chanID string, ws sockjs.Session) *Channel {
 	client := NewClient()
 
+	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
+	if !isClientOriginAllowed(originHeader) {
+		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
+		ws.Close(0, "Origin not allowed")
+		return nil
+	}
+
 	remoteAddr, remotePort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
 	client.remoteAddr = remoteAddr
 	client.remotePort, _ = strconv.Atoi(remotePort)
@@ -105,10 +112,13 @@ func kiwiircHandler(session sockjs.Session) {
 				if idEnd == -1 {
 					// msg is in the form of ":chanId"
 					chanID := msg[1:]
-					channel, channelExists := channels[chanID]
+					_, channelExists := channels[chanID]
 					if !channelExists {
-						channel = *makeChannel(chanID, session)
-						channels[chanID] = channel
+						channel := makeChannel(chanID, session)
+						if channel == nil {
+							continue
+						}
+						channels[chanID] = *channel
 
 						// When the channel closes, remove it from the map again
 						go func() {

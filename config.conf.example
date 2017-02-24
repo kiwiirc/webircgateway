@@ -36,6 +36,11 @@ websocket
 sockjs
 kiwiirc
 
+# Websites (hostnames) that are allowed to connect here
+# No entries here will allow any website to connect.
+[allowed_origins]
+#*://example.com
+
 # Connections will be sent to a random upstream
 [upstream.1]
 hostname = "irc.example.net"

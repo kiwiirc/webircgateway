@@ -337,6 +337,25 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 	return line, nil
 }
 
+func isClientOriginAllowed(originHeader string) bool {
+	// Empty list of origins = all origins allowed
+	if len(Config.remoteOrigins) == 0 {
+		return true
+	}
+
+	foundMatch := false
+
+	for _, originMatch := range Config.remoteOrigins {
+		if originMatch.Match(originHeader) {
+			log.Printf("%s = %s", originHeader, originMatch)
+			foundMatch = true
+			break
+		}
+	}
+
+	return foundMatch
+}
+
 func findUpstream() (ConfigUpstream, error) {
 	var ret ConfigUpstream
 

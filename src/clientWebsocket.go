@@ -17,6 +17,13 @@ func websocketHTTPHandler() {
 func websocketHandler(ws *websocket.Conn) {
 	client := NewClient()
 
+	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
+	if !isClientOriginAllowed(originHeader) {
+		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
+		ws.Close()
+		return
+	}
+
 	remoteAddr, remotePort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
 	client.remoteAddr = remoteAddr
 	client.remotePort, _ = strconv.Atoi(remotePort)

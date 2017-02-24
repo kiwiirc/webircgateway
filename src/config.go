@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gobwas/glob"
 	"gopkg.in/ini.v1"
 )
 
@@ -37,6 +38,7 @@ var Config struct {
 	upstreams             []ConfigUpstream
 	servers               []ConfigServer
 	serverEngines         []string
+	remoteOrigins         []glob.Glob
 	webroot               string
 	clientRealname        string
 	clientUsername        string
@@ -67,6 +69,7 @@ func loadConfig() error {
 	Config.upstreams = []ConfigUpstream{}
 	Config.servers = []ConfigServer{}
 	Config.serverEngines = []string{}
+	Config.remoteOrigins = []glob.Glob{}
 	Config.webroot = ""
 
 	for _, section := range cfg.Sections() {
@@ -129,6 +132,17 @@ func loadConfig() error {
 		if strings.Index(section.Name(), "engines") == 0 {
 			for _, engine := range section.KeyStrings() {
 				Config.serverEngines = append(Config.serverEngines, strings.Trim(engine, "\n"))
+			}
+		}
+
+		if strings.Index(section.Name(), "allowed_origins") == 0 {
+			for _, origin := range section.KeyStrings() {
+				match, err := glob.Compile(glob.QuoteMeta(origin))
+				if err != nil {
+					log.Println("Config section allowed_origins has invalid match, " + origin)
+					continue
+				}
+				Config.remoteOrigins = append(Config.remoteOrigins, match)
 			}
 		}
 	}
