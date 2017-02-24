@@ -4,7 +4,11 @@
 
 # We have some internal packages under ./pkg
 ROOTPATH=$( cd $(dirname $0) ; pwd )
-GOPATH=$ROOTPATH/pkg:$GOPATH
+if [ -z "$GOPATH"]; then
+        export GOPATH=$ROOTPATH/pkg
+else
+        export GOPATH=$ROOTPATH/pkg:$GOPATH
+fi
 
 case "$1" in
         prepare)
