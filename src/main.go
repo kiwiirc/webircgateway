@@ -12,12 +12,22 @@ import (
 	"webircgateway/identd"
 )
 
-var identdServ identd.Server
+var (
+	// Version - The current version of webircgateway
+	Version    = "0.1.1"
+	identdServ identd.Server
+)
 
 func main() {
+	printVersion := flag.Bool("version", false, "Print the version")
 	configFile := flag.String("config", "config.conf", "Config file location")
 	runConfigTest := flag.Bool("test", false, "Just test the config file")
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
 
 	Config.configFile, _ = filepath.Abs(*configFile)
 	log.Printf("Using config file %s", Config.configFile)
