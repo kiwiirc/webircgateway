@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Helper to run and build webircgateway
 
