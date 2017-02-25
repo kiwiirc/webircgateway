@@ -24,8 +24,8 @@ case "$1" in
                 ;;
 
         build)
-                echo Building webircgateway..
                 OUTFILE=${2:-webircgateway}
+                echo Building $OUTFILE
                 rm -f $OUTFILE
                 go build -o $OUTFILE $ROOTPATH/src/*.go
                 chmod +x $OUTFILE
