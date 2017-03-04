@@ -286,7 +286,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 	}
 
 	// USER <username> <hostname> <servername> <realname>
-	if message.Command == "USER" {
+	if strings.ToUpper(message.Command) == "USER" {
 		if len(message.Params) < 4 {
 			return line, errors.New("Invalid USER line")
 		}
@@ -308,7 +308,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		go c.connectUpstream()
 	}
 
-	if message.Command == "ENCODING" {
+	if strings.ToUpper(message.Command) == "ENCODING" {
 		if len(message.Params) > 0 {
 			encoding, _ := charset.Lookup(message.Params[0])
 			if encoding == nil {
@@ -323,7 +323,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		return "", nil
 	}
 
-	if message.Command == "HOST" && !c.UpstreamStarted {
+	if strings.ToUpper(message.Command) == "HOST" && !c.UpstreamStarted {
 		// HOST irc.network.net:6667
 		// HOST irc.network.net:+6667
 
