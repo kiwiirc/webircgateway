@@ -11,7 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"webircgateway/irc"
+
+	"golang.org/x/net/html/charset"
 )
 
 // Client - Connecting client struct
@@ -31,6 +34,7 @@ type Client struct {
 	destPort        int
 	destTLS         bool
 	ircState        irc.State
+	encoding        string
 }
 
 var nextClientID = 1
@@ -47,6 +51,7 @@ func NewClient() *Client {
 		UpstreamSend:    make(chan string, 50),
 		signalClose:     make(chan string),
 		upstreamSignals: make(chan string),
+		encoding:        "UTF-8",
 	}
 	return c
 }
@@ -206,6 +211,12 @@ func (c *Client) connectUpstream() {
 			}
 
 			client.Log(1, "->upstream: %s", data)
+			data = utf8ToOther(data, client.encoding)
+			if data == "" {
+				client.Log(1, "Failed to encode into '%s'. Dropping data", c.encoding)
+				continue
+			}
+
 			upstream.Write([]byte(data + "\r\n"))
 
 			if writeThrottle > 0 {
@@ -226,6 +237,13 @@ func (c *Client) connectUpstream() {
 			}
 
 			client.Log(1, "upstream->: %s", data)
+
+			data = ensureUtf8(data, client.encoding)
+			if data == "" {
+				client.Log(1, "Failed to encode into 'UTF-8'. Dropping data")
+				continue
+			}
+
 			client.Send <- data
 		}
 
@@ -288,6 +306,21 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		c.ircState.Username = message.Params[0]
 		go c.connectUpstream()
+	}
+
+	if message.Command == "ENCODING" {
+		if len(message.Params) > 0 {
+			encoding, _ := charset.Lookup(message.Params[0])
+			if encoding == nil {
+				c.Log(1, "Requested unknown encoding, %s", message.Params[0])
+			} else {
+				c.encoding = message.Params[0]
+				c.Log(1, "Set encoding to %s", message.Params[0])
+			}
+		}
+
+		// Don't send the ENCODING command upstream
+		return "", nil
 	}
 
 	if message.Command == "HOST" && !c.UpstreamStarted {
@@ -389,4 +422,34 @@ func findWebircPassword(ircHost string) string {
 	}
 
 	return pass
+}
+
+func ensureUtf8(s string, fromEncoding string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+
+	encoding, _ := charset.Lookup(fromEncoding)
+	if encoding == nil {
+		return ""
+	}
+
+	d := encoding.NewDecoder()
+	s2, _ := d.String(s)
+	return s2
+}
+
+func utf8ToOther(s string, toEncoding string) string {
+	if toEncoding == "UTF-8" && utf8.ValidString(s) {
+		return s
+	}
+
+	encoding, _ := charset.Lookup(toEncoding)
+	if encoding == nil {
+		return ""
+	}
+
+	e := encoding.NewEncoder()
+	s2, _ := e.String(s)
+	return s2
 }
