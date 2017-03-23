@@ -328,8 +328,6 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		// HOST irc.network.net:+6667
 
 		if !Config.gateway {
-			c.Send <- "ERROR :Host forbidden"
-			c.StartShutdown("forbidden_host")
 			return "", nil
 		}
 
