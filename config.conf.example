@@ -53,7 +53,7 @@ throttle = 2
 webirc = ""
 
 
-# A gateway to any IRC network
+# A public gateway to any IRC network
 # If enabled, Kiwi IRC clients may connect to any IRC network through the kiwiirc engine
 [gateway]
 enabled = false
