@@ -286,7 +286,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 	}
 
 	// USER <username> <hostname> <servername> <realname>
-	if strings.ToUpper(message.Command) == "USER" {
+	if strings.ToUpper(message.Command) == "USER" && !c.UpstreamStarted {
 		if len(message.Params) < 4 {
 			return line, errors.New("Invalid USER line")
 		}
