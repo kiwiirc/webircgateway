@@ -140,7 +140,7 @@ func kiwiircHandler(session sockjs.Session) {
 					}
 				}
 			} else if err != nil {
-				log.Printf("sockjs connection read error: %s", err.Error())
+				log.Printf("kiwi connection closed (%s)", err.Error())
 				break
 			}
 		}

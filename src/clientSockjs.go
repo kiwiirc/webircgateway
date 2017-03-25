@@ -52,7 +52,7 @@ func sockjsHandler(session sockjs.Session) {
 					// TODO: Should this really just drop the data or close the connection?
 				}
 			} else if err != nil {
-				client.Log(1, "Websocket read error: %s", err.Error())
+				client.Log(1, "sockjs connection closed (%s)", err.Error())
 				break
 			} else if len(msg) == 0 {
 				client.Log(1, "Got 0 bytes from websocket")
