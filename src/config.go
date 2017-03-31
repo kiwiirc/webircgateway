@@ -19,12 +19,14 @@ type ConfigUpstream struct {
 	WebircPassword string
 }
 
+// ConfigServer - A web server config
 type ConfigServer struct {
-	LocalAddr string
-	Port      int
-	TLS       bool
-	CertFile  string
-	KeyFile   string
+	LocalAddr            string
+	Port                 int
+	TLS                  bool
+	CertFile             string
+	KeyFile              string
+	LetsEncryptCacheFile string
 }
 
 // Config - Config options for the running app
@@ -113,6 +115,7 @@ func loadConfig() error {
 			server.TLS = section.Key("tls").MustBool(false)
 			server.CertFile = section.Key("cert").MustString("")
 			server.KeyFile = section.Key("key").MustString("")
+			server.LetsEncryptCacheFile = section.Key("letsencrypt_cache").MustString("")
 
 			Config.servers = append(Config.servers, server)
 		}
