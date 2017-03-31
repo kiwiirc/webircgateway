@@ -24,6 +24,9 @@ port = 80
 #tls = true
 #cert = server.crt
 #key = server.key
+# If you don't have a certificate, uncomment the below line to automatically generate a
+# free certificate using letsencrypt.com (overrides the above cert/key options)
+#letsencrypt_cache = letsencrypt.cache
 
 # Serve static files from a web root folder.
 # Optional, but handy for serving the Kiwi IRC client if no other webserver is available

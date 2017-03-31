@@ -20,6 +20,8 @@ case "$1" in
                 go get golang.org/x/net/websocket
                 echo Downloading dependency: github.com/gobwas/glob
                 go get github.com/gobwas/glob
+                echo Downloading dependency: rsc.io/letsencrypt
+                go get rsc.io/letsencrypt
                 echo Complete!
                 ;;
 

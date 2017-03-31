@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"webircgateway/identd"
+
+	"rsc.io/letsencrypt"
 )
 
 var (
@@ -117,7 +120,7 @@ func startServers() {
 func startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
-	if conf.TLS {
+	if conf.TLS && conf.LetsEncryptCacheFile == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
 			log.Println("'cert' and 'key' options must be set for TLS servers")
 			return
@@ -131,6 +134,21 @@ func startServer(conf ConfigServer) {
 		if err != nil {
 			log.Printf("Failed to listen with TLS: %s", err.Error())
 		}
+	} else if conf.TLS && conf.LetsEncryptCacheFile != "" {
+		m := letsencrypt.Manager{}
+		err := m.CacheFile(conf.LetsEncryptCacheFile)
+		if err != nil {
+			log.Printf("Failed to listen with letsencrypt TLS: %s", err.Error())
+		}
+		log.Printf("Listening with letsencrypt TLS on %s", addr)
+		srv := &http.Server{
+			Addr: addr,
+			TLSConfig: &tls.Config{
+				GetCertificate: m.GetCertificate,
+			},
+		}
+		err = srv.ListenAndServeTLS("", "")
+		log.Printf("Listening with letsencrypt failed: %s", err.Error())
 	} else {
 		log.Printf("Listening on %s", addr)
 		err := http.ListenAndServe(addr, nil)
