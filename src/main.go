@@ -18,7 +18,7 @@ import (
 
 var (
 	// Version - The current version of webircgateway
-	Version    = "0.1.1"
+	Version    = "0.1.2"
 	identdServ identd.Server
 )
 
