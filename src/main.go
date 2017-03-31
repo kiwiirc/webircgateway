@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -98,6 +99,16 @@ func maybeStartStaticFileServer() {
 }
 
 func startServers() {
+	// Add some general server info about this webircgateway instance
+	http.HandleFunc("/webirc/", func(w http.ResponseWriter, r *http.Request) {
+		out, _ := json.Marshal(map[string]interface{}{
+			"name":    "webircgateway",
+			"version": Version,
+		})
+
+		w.Write(out)
+	})
+
 	for _, server := range Config.servers {
 		go startServer(server)
 	}
