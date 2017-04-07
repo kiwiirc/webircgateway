@@ -17,6 +17,7 @@ type ConfigUpstream struct {
 	Timeout        int
 	Throttle       int
 	WebircPassword string
+	Proxy          *ConfigProxy
 }
 
 // ConfigServer - A web server config
@@ -27,6 +28,15 @@ type ConfigServer struct {
 	CertFile             string
 	KeyFile              string
 	LetsEncryptCacheFile string
+}
+
+type ConfigProxy struct {
+	Type      string
+	Hostname  string
+	Port      int
+	TLS       bool
+	Username  string
+	Interface string
 }
 
 // Config - Config options for the running app
