@@ -8,4 +8,3 @@ type State struct {
 	RealName   string
 	Password   string
 }
-}
