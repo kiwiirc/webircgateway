@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
+	"kiwiirc/proxy"
 	"log"
 	"math/rand"
 	"net"
@@ -112,10 +114,20 @@ func (c *Client) connectUpstream() {
 
 	c.UpstreamStarted = true
 
+	// The upstream connection object may be either a TCP client or a KiwiProxy
+	// instance. Create a common interface we can use that satisfies either
+	// case.
+	type ConnInterface interface {
+		io.Reader
+		io.Writer
+		Close() error
+	}
+	var upstream ConnInterface
+
 	var upstreamConfig ConfigUpstream
 
 	if client.destHost == "" {
-		log.Println("Using pre-set upstream")
+		client.Log(2, "Using pre-set upstream")
 		var err error
 		upstreamConfig, err = findUpstream()
 		if err != nil {
@@ -124,58 +136,78 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
-		log.Println("Using client given upstream")
-		upstreamConfig = ConfigUpstream{}
-		upstreamConfig.Hostname = client.destHost
-		upstreamConfig.Port = client.destPort
-		upstreamConfig.TLS = client.destTLS
-		upstreamConfig.Timeout = Config.gatewayTimeout
-		upstreamConfig.Throttle = Config.gatewayThrottle
-		upstreamConfig.WebircPassword = findWebircPassword(client.destHost)
+		client.Log(2, "Using client given upstream")
+		upstreamConfig = configureUpstreamFromClient(c)
 	}
 
-	dialer := net.Dialer{}
-	dialer.Timeout = time.Second * time.Duration(upstreamConfig.Timeout)
+	if upstreamConfig.Proxy == nil {
+		// Connect directly to the IRCd
+		dialer := net.Dialer{}
+		dialer.Timeout = time.Second * time.Duration(upstreamConfig.Timeout)
 
-	upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
-	var upstream net.Conn
-	var connErr error
+		upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
+		conn, connErr := dialer.Dial("tcp", upstreamStr)
 
-	upstream, connErr = dialer.Dial("tcp", upstreamStr)
-
-	if connErr != nil {
-		client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
-		client.UpstreamSignal("closed")
-		close(client.Send)
-		client.StartShutdown("err_connecting_upstream")
-		return
-	}
-
-	// Keep track of the upstreams local and remote port numbers
-	_, lPortStr, _ := net.SplitHostPort(upstream.LocalAddr().String())
-	client.ircState.LocalPort, _ = strconv.Atoi(lPortStr)
-	_, rPortStr, _ := net.SplitHostPort(upstream.RemoteAddr().String())
-	client.ircState.RemotePort, _ = strconv.Atoi(rPortStr)
-
-	// Add the ports into the identd before possible TLS handshaking. If we do it after then
-	// there's a good chance the identd lookup will occur before the handshake has finished
-	if Config.identd {
-		identdServ.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, "boo")
-	}
-
-	if upstreamConfig.TLS {
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
-		tlsConn := tls.Client(upstream, tlsConfig)
-		err := tlsConn.Handshake()
-		if err != nil {
-			client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
+		if connErr != nil {
+			client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
 			client.UpstreamSignal("closed")
 			close(client.Send)
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
 
-		upstream = net.Conn(tlsConn)
+		// Add the ports into the identd before possible TLS handshaking. If we do it after then
+		// there's a good chance the identd lookup will occur before the handshake has finished
+		if Config.identd {
+			// Keep track of the upstreams local and remote port numbers
+			_, lPortStr, _ := net.SplitHostPort(conn.LocalAddr().String())
+			client.ircState.LocalPort, _ = strconv.Atoi(lPortStr)
+			_, rPortStr, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			client.ircState.RemotePort, _ = strconv.Atoi(rPortStr)
+
+			identdServ.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, client.ircState.Username)
+		}
+
+		if upstreamConfig.TLS {
+			tlsConfig := &tls.Config{InsecureSkipVerify: true}
+			tlsConn := tls.Client(conn, tlsConfig)
+			err := tlsConn.Handshake()
+			if err != nil {
+				client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
+				client.UpstreamSignal("closed")
+				close(client.Send)
+				client.StartShutdown("err_connecting_upstream")
+				return
+			}
+
+			conn = net.Conn(tlsConn)
+		}
+
+		upstream = ConnInterface(conn)
+	} else {
+		// Connect to the IRCd via a proxy
+		conn := kiwiirc.MakeKiwiProxyConnection()
+		conn.DestHost = upstreamConfig.Hostname
+		conn.DestPort = upstreamConfig.Port
+		conn.DestTLS = upstreamConfig.TLS
+		conn.Username = upstreamConfig.Proxy.Username
+		conn.ProxyInterface = upstreamConfig.Proxy.Interface
+
+		dialErr := conn.Dial(fmt.Sprintf(
+			"%s:%d",
+			upstreamConfig.Proxy.Hostname,
+			upstreamConfig.Proxy.Port,
+		))
+
+		if dialErr != nil {
+			client.Log(3, "Error connecting to the kiwi proxy. %s", dialErr.Error())
+			client.UpstreamSignal("closed")
+			close(client.Send)
+			client.StartShutdown("err_connecting_upstream")
+			return
+		}
+
+		upstream = ConnInterface(conn)
 	}
 
 	// Send any WEBIRC lines
@@ -208,6 +240,15 @@ func (c *Client) connectUpstream() {
 			if !ok {
 				client.Log(1, "connectUpstream() client.UpstreamSend closed")
 				break
+			}
+
+			// Hijack the USER command as we may have some overrides
+			if strings.HasPrefix(data, "USER ") {
+				data = fmt.Sprintf(
+					"USER %s 0 * :%s",
+					client.ircState.Username,
+					client.ircState.RealName,
+				)
 			}
 
 			client.Log(1, "->upstream: %s", data)
@@ -252,7 +293,9 @@ func (c *Client) connectUpstream() {
 		close(client.Send)
 		upstream.Close()
 
-		identdServ.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
+		if client.ircState.RemotePort > 0 {
+			identdServ.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
+		}
 	}()
 }
 
@@ -305,6 +348,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		line = message.ToLine()
 
 		c.ircState.Username = message.Params[0]
+		c.ircState.RealName = message.Params[3]
 		go c.connectUpstream()
 	}
 
@@ -400,17 +444,23 @@ func findUpstream() (ConfigUpstream, error) {
 	return ret, nil
 }
 
-func ipv4ToHex(ip string) string {
-	parts := strings.Split(ip, ".")
-	for idx, part := range parts {
-		num, _ := strconv.Atoi(part)
-		parts[idx] = fmt.Sprintf("%x", num)
-		if len(parts[idx]) == 1 {
-			parts[idx] = "0" + parts[idx]
-		}
-	}
+func configureUpstreamFromClient(client *Client) ConfigUpstream {
+	upstreamConfig := ConfigUpstream{}
+	upstreamConfig.Hostname = client.destHost
+	upstreamConfig.Port = client.destPort
+	upstreamConfig.TLS = client.destTLS
+	upstreamConfig.Timeout = Config.gatewayTimeout
+	upstreamConfig.Throttle = Config.gatewayThrottle
+	upstreamConfig.WebircPassword = findWebircPassword(client.destHost)
 
-	return strings.Join(parts, "")
+	return upstreamConfig
+}
+
+func ipv4ToHex(ip string) string {
+	var ipParts [4]int
+	fmt.Sscanf(ip, "%d.%d.%d.%d", &ipParts[0], &ipParts[1], &ipParts[2], &ipParts[3])
+	ipHex := fmt.Sprintf("%02x%02x%02x%02x", ipParts[0], ipParts[1], ipParts[2], ipParts[3])
+	return ipHex
 }
 
 func findWebircPassword(ircHost string) string {
