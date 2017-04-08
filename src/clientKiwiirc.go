@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
@@ -30,9 +29,7 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		return nil
 	}
 
-	remoteAddr, remotePort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
-	client.remoteAddr = remoteAddr
-	client.remotePort, _ = strconv.Atoi(remotePort)
+	client.remoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
 
 	clientHostnames, err := net.LookupAddr(client.remoteAddr)
 	if err != nil {

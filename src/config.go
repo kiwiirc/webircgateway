@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"path/filepath"
 	"strings"
 
@@ -51,6 +52,7 @@ var Config struct {
 	servers               []ConfigServer
 	serverEngines         []string
 	remoteOrigins         []glob.Glob
+	reverseProxies        []net.IPNet
 	webroot               string
 	clientRealname        string
 	clientUsername        string
@@ -82,6 +84,7 @@ func loadConfig() error {
 	Config.servers = []ConfigServer{}
 	Config.serverEngines = []string{}
 	Config.remoteOrigins = []glob.Glob{}
+	Config.reverseProxies = []net.IPNet{}
 	Config.webroot = ""
 
 	for _, section := range cfg.Sections() {
@@ -156,6 +159,17 @@ func loadConfig() error {
 					continue
 				}
 				Config.remoteOrigins = append(Config.remoteOrigins, match)
+			}
+		}
+
+		if strings.Index(section.Name(), "reverse_proxies") == 0 {
+			for _, cidrRange := range section.KeyStrings() {
+				_, validRange, cidrErr := net.ParseCIDR(cidrRange)
+				if cidrErr != nil {
+					log.Println("Config section reverse_proxies has invalid entry, " + cidrRange)
+					continue
+				}
+				Config.reverseProxies = append(Config.reverseProxies, *validRange)
 			}
 		}
 	}

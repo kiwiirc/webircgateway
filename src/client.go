@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -500,4 +501,38 @@ func utf8ToOther(s string, toEncoding string) string {
 	e := encoding.NewEncoder()
 	s2, _ := e.String(s)
 	return s2
+}
+
+func GetRemoteAddressFromRequest(req *http.Request) net.IP {
+	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+	remoteIP := net.ParseIP(remoteAddr)
+
+	isInRange := false
+	for _, cidrRange := range Config.reverseProxies {
+		log.Printf("%s %s %t", cidrRange.String(), remoteIP, cidrRange.Contains(remoteIP))
+		if cidrRange.Contains(remoteIP) {
+			isInRange = true
+			break
+		}
+	}
+
+	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
+	// the headers and use the remoteIP as the users IP
+	if !isInRange {
+		log.Printf("%s is not a rproxy address. returning %s", remoteIP, remoteIP)
+		return remoteIP
+	}
+
+	headerVal := req.Header.Get("x-forwarded-for")
+	ips := strings.Split(headerVal, ",")
+	ipStr := strings.Trim(ips[0], " ")
+	if ipStr != "" {
+		ip := net.ParseIP(ipStr)
+		if ip != nil {
+			remoteIP = ip
+		}
+	}
+
+	return remoteIP
+
 }

@@ -4,7 +4,6 @@ package main
 import (
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
@@ -25,9 +24,7 @@ func sockjsHandler(session sockjs.Session) {
 		return
 	}
 
-	remoteAddr, remotePort, _ := net.SplitHostPort(session.Request().RemoteAddr)
-	client.remoteAddr = remoteAddr
-	client.remotePort, _ = strconv.Atoi(remotePort)
+	client.remoteAddr = GetRemoteAddressFromRequest(session.Request()).String()
 
 	clientHostnames, err := net.LookupAddr(client.remoteAddr)
 	if err != nil {

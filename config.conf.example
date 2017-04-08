@@ -44,6 +44,17 @@ kiwiirc
 [allowed_origins]
 #*://example.com
 
+# If using a reverse proxy, it must be whitelisted for the client
+# hostnames to be read correctly. In CIDR format.
+# The user IPs are read from the standard X-Forwarded-For HTTP header
+[reverse_proxies]
+127.0.0.0/8
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
+"::1/128"
+"fd00::/8"
+
 # Connections will be sent to a random upstream
 [upstream.1]
 hostname = "irc.example.net"

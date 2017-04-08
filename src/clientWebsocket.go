@@ -3,7 +3,6 @@ package main
 import (
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -24,9 +23,7 @@ func websocketHandler(ws *websocket.Conn) {
 		return
 	}
 
-	remoteAddr, remotePort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
-	client.remoteAddr = remoteAddr
-	client.remotePort, _ = strconv.Atoi(remotePort)
+	client.remoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
 
 	clientHostnames, err := net.LookupAddr(client.remoteAddr)
 	if err != nil {
