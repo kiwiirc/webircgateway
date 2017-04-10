@@ -509,7 +509,6 @@ func GetRemoteAddressFromRequest(req *http.Request) net.IP {
 
 	isInRange := false
 	for _, cidrRange := range Config.reverseProxies {
-		log.Printf("%s %s %t", cidrRange.String(), remoteIP, cidrRange.Contains(remoteIP))
 		if cidrRange.Contains(remoteIP) {
 			isInRange = true
 			break
@@ -519,7 +518,6 @@ func GetRemoteAddressFromRequest(req *http.Request) net.IP {
 	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
 	// the headers and use the remoteIP as the users IP
 	if !isInRange {
-		log.Printf("%s is not a rproxy address. returning %s", remoteIP, remoteIP)
 		return remoteIP
 	}
 
