@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"webircgateway/identd"
 
@@ -33,8 +32,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	Config.configFile, _ = filepath.Abs(*configFile)
-	log.Printf("Using config file %s", Config.configFile)
+	SetConfigFile(*configFile)
+	log.Printf("Using config %s", Config.configFile)
 
 	err := loadConfig()
 	if err != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -71,8 +72,30 @@ func ConfigResolvePath(path string) string {
 	return resolved
 }
 
+func SetConfigFile(configFile string) {
+	// Config paths starting with $ is executed rather than treated as a path
+	if strings.HasPrefix(configFile, "$ ") {
+		Config.configFile = configFile
+	} else {
+		Config.configFile, _ = filepath.Abs(configFile)
+	}
+}
+
 func loadConfig() error {
-	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, Config.configFile)
+	var configSrc interface{}
+
+	if strings.HasPrefix(Config.configFile, "$ ") {
+		cmdRawOut, err := exec.Command("sh", "-c", Config.configFile[2:]).Output()
+		if err != nil {
+			return err
+		}
+
+		configSrc = cmdRawOut
+	} else {
+		configSrc = Config.configFile
+	}
+
+	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, configSrc)
 	if err != nil {
 		return err
 	}
