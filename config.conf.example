@@ -6,7 +6,7 @@ identd = false
 
 [clients]
 # Default username / realname for IRC connections. If disabled it will use
-# the values provided from the RC client itself.
+# the values provided from the IRC client itself.
 # %h will be replaced with the users hostname
 # %i will be replaced with a hexed value of the users IP
 #username = "%i"
