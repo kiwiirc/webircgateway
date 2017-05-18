@@ -1,4 +1,4 @@
-package kiwiirc
+package proxy
 
 import (
 	"encoding/json"

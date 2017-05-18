@@ -2,13 +2,7 @@
 
 # Helper to run and build webircgateway
 
-# We have some internal packages under ./pkg
 ROOTPATH=$( cd $(dirname $0) ; pwd )
-if [ -z "$GOPATH"]; then
-        export GOPATH=$ROOTPATH/pkg
-else
-        export GOPATH=$ROOTPATH/pkg:$GOPATH
-fi
 
 case "$1" in
         prepare)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kiwiirc/proxy"
 	"log"
 	"math/rand"
 	"net"
@@ -15,7 +14,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"webircgateway/irc"
+
+	"github.com/kiwiirc/webircgateway/pkg/irc"
+
+	"github.com/kiwiirc/webircgateway/pkg/proxy"
 
 	"golang.org/x/net/html/charset"
 )
@@ -187,7 +189,7 @@ func (c *Client) connectUpstream() {
 		upstream = ConnInterface(conn)
 	} else {
 		// Connect to the IRCd via a proxy
-		conn := kiwiirc.MakeKiwiProxyConnection()
+		conn := proxy.MakeKiwiProxyConnection()
 		conn.DestHost = upstreamConfig.Hostname
 		conn.DestPort = upstreamConfig.Port
 		conn.DestTLS = upstreamConfig.TLS

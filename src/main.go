@@ -10,8 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"webircgateway/identd"
 
+	"github.com/kiwiirc/webircgateway/pkg/identd"
 	"rsc.io/letsencrypt"
 )
 
