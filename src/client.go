@@ -425,7 +425,6 @@ func isClientOriginAllowed(originHeader string) bool {
 
 	for _, originMatch := range Config.remoteOrigins {
 		if originMatch.Match(originHeader) {
-			log.Printf("%s = %s", originHeader, originMatch)
 			foundMatch = true
 			break
 		}
