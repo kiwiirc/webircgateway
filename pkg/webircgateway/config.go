@@ -1,4 +1,4 @@
-package main
+package webircgateway
 
 import (
 	"log"
@@ -81,7 +81,11 @@ func SetConfigFile(configFile string) {
 	}
 }
 
-func loadConfig() error {
+// CurrentConfigFile - Return the full path or command for the config file in use
+func CurrentConfigFile() string {
+	return Config.configFile
+}
+func LoadConfig() error {
 	var configSrc interface{}
 
 	if strings.HasPrefix(Config.configFile, "$ ") {

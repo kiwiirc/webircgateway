@@ -23,13 +23,13 @@ case "$1" in
                 OUTFILE=${2:-webircgateway}
                 echo Building $OUTFILE
                 rm -f $OUTFILE
-                go build -o $OUTFILE $ROOTPATH/src/*.go
+                go build -o $OUTFILE $ROOTPATH/main.go
                 chmod +x $OUTFILE
                 ls -lh $OUTFILE
                 ;;
 
         run)
-                go run $ROOTPATH/src/*.go "${@:2}"
+                go run $ROOTPATH/main.go "${@:2}"
                 ;;
 
         *)

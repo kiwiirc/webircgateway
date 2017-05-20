@@ -1,4 +1,4 @@
-package main
+package webircgateway
 
 import (
 	"bufio"
@@ -24,7 +24,7 @@ import (
 
 // Client - Connecting client struct
 type Client struct {
-	id              int
+	Id              int
 	ShuttingDown    bool
 	Recv            chan string
 	Send            chan string
@@ -32,14 +32,14 @@ type Client struct {
 	signalClose     chan string
 	upstreamSignals chan string
 	UpstreamStarted bool
-	remoteAddr      string
-	remoteHostname  string
-	remotePort      int
-	destHost        string
-	destPort        int
-	destTLS         bool
-	ircState        irc.State
-	encoding        string
+	RemoteAddr      string
+	RemoteHostname  string
+	RemotePort      int
+	DestHost        string
+	DestPort        int
+	DestTLS         bool
+	IrcState        irc.State
+	Encoding        string
 }
 
 var nextClientID = 1
@@ -50,13 +50,13 @@ func NewClient() *Client {
 	nextClientID++
 
 	c := &Client{
-		id:              thisID,
+		Id:              thisID,
 		Recv:            make(chan string, 50),
 		Send:            make(chan string, 50),
 		UpstreamSend:    make(chan string, 50),
 		signalClose:     make(chan string),
 		upstreamSignals: make(chan string),
-		encoding:        "UTF-8",
+		Encoding:        "UTF-8",
 	}
 	return c
 }
@@ -68,7 +68,7 @@ func (c *Client) Log(level int, format string, args ...interface{}) {
 	}
 
 	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
-	log.Printf("%s client:%d %s", levels[level-1], c.id, fmt.Sprintf(format, args...))
+	log.Printf("%s client:%d %s", levels[level-1], c.Id, fmt.Sprintf(format, args...))
 }
 
 func (c *Client) StartShutdown(reason string) {
@@ -129,7 +129,7 @@ func (c *Client) connectUpstream() {
 
 	var upstreamConfig ConfigUpstream
 
-	if client.destHost == "" {
+	if client.DestHost == "" {
 		client.Log(2, "Using pre-set upstream")
 		var err error
 		upstreamConfig, err = findUpstream()
@@ -164,11 +164,11 @@ func (c *Client) connectUpstream() {
 		if Config.identd {
 			// Keep track of the upstreams local and remote port numbers
 			_, lPortStr, _ := net.SplitHostPort(conn.LocalAddr().String())
-			client.ircState.LocalPort, _ = strconv.Atoi(lPortStr)
+			client.IrcState.LocalPort, _ = strconv.Atoi(lPortStr)
 			_, rPortStr, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			client.ircState.RemotePort, _ = strconv.Atoi(rPortStr)
+			client.IrcState.RemotePort, _ = strconv.Atoi(rPortStr)
 
-			identdServ.AddIdent(client.ircState.LocalPort, client.ircState.RemotePort, client.ircState.Username)
+			identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username)
 		}
 
 		if upstreamConfig.TLS {
@@ -218,8 +218,8 @@ func (c *Client) connectUpstream() {
 		webircLine := fmt.Sprintf(
 			"WEBIRC %s websocketgateway %s %s\n",
 			upstreamConfig.WebircPassword,
-			client.remoteHostname,
-			client.remoteAddr,
+			client.RemoteHostname,
+			client.RemoteAddr,
 		)
 		client.Log(1, "->upstream: %s", webircLine)
 		upstream.Write([]byte(webircLine))
@@ -249,15 +249,15 @@ func (c *Client) connectUpstream() {
 			if strings.HasPrefix(data, "USER ") {
 				data = fmt.Sprintf(
 					"USER %s 0 * :%s",
-					client.ircState.Username,
-					client.ircState.RealName,
+					client.IrcState.Username,
+					client.IrcState.RealName,
 				)
 			}
 
 			client.Log(1, "->upstream: %s", data)
-			data = utf8ToOther(data, client.encoding)
+			data = utf8ToOther(data, client.Encoding)
 			if data == "" {
-				client.Log(1, "Failed to encode into '%s'. Dropping data", c.encoding)
+				client.Log(1, "Failed to encode into '%s'. Dropping data", c.Encoding)
 				continue
 			}
 
@@ -282,7 +282,7 @@ func (c *Client) connectUpstream() {
 
 			client.Log(1, "upstream->: %s", data)
 
-			data = ensureUtf8(data, client.encoding)
+			data = ensureUtf8(data, client.Encoding)
 			if data == "" {
 				client.Log(1, "Failed to encode into 'UTF-8'. Dropping data")
 				continue
@@ -295,9 +295,8 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("upstream_closed")
 		close(client.Send)
 		upstream.Close()
-
-		if client.ircState.RemotePort > 0 {
-			identdServ.RemoveIdent(client.ircState.LocalPort, client.ircState.RemotePort)
+		if client.IrcState.RemotePort > 0 {
+			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort)
 		}
 	}()
 }
@@ -339,19 +338,19 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		if Config.clientUsername != "" {
 			message.Params[0] = Config.clientUsername
-			message.Params[0] = strings.Replace(message.Params[0], "%i", ipv4ToHex(c.remoteAddr), -1)
-			message.Params[0] = strings.Replace(message.Params[0], "%h", c.remoteHostname, -1)
+			message.Params[0] = strings.Replace(message.Params[0], "%i", ipv4ToHex(c.RemoteAddr), -1)
+			message.Params[0] = strings.Replace(message.Params[0], "%h", c.RemoteHostname, -1)
 		}
 		if Config.clientRealname != "" {
 			message.Params[3] = Config.clientRealname
-			message.Params[3] = strings.Replace(message.Params[3], "%i", ipv4ToHex(c.remoteAddr), -1)
-			message.Params[3] = strings.Replace(message.Params[3], "%h", c.remoteHostname, -1)
+			message.Params[3] = strings.Replace(message.Params[3], "%i", ipv4ToHex(c.RemoteAddr), -1)
+			message.Params[3] = strings.Replace(message.Params[3], "%h", c.RemoteHostname, -1)
 		}
 
 		line = message.ToLine()
 
-		c.ircState.Username = message.Params[0]
-		c.ircState.RealName = message.Params[3]
+		c.IrcState.Username = message.Params[0]
+		c.IrcState.RealName = message.Params[3]
 		go c.connectUpstream()
 	}
 
@@ -361,7 +360,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 			if encoding == nil {
 				c.Log(1, "Requested unknown encoding, %s", message.Params[0])
 			} else {
-				c.encoding = message.Params[0]
+				c.Encoding = message.Params[0]
 				c.Log(1, "Set encoding to %s", message.Params[0])
 			}
 		}
@@ -388,22 +387,22 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		// Parse host:+port into the c.dest* vars
 		portSep := strings.Index(addr, ":")
 		if portSep == -1 {
-			c.destHost = addr
-			c.destPort = 6667
-			c.destTLS = false
+			c.DestHost = addr
+			c.DestPort = 6667
+			c.DestTLS = false
 		} else {
-			c.destHost = addr[0:portSep]
+			c.DestHost = addr[0:portSep]
 			portParam := addr[portSep+1:]
 			if portParam[0:1] == "+" {
-				c.destTLS = true
-				c.destPort, err = strconv.Atoi(portParam[1:])
+				c.DestTLS = true
+				c.DestPort, err = strconv.Atoi(portParam[1:])
 				if err != nil {
-					c.destPort = 6697
+					c.DestPort = 6697
 				}
 			} else {
-				c.destPort, err = strconv.Atoi(portParam[0:])
+				c.DestPort, err = strconv.Atoi(portParam[0:])
 				if err != nil {
-					c.destPort = 6667
+					c.DestPort = 6667
 				}
 			}
 		}
@@ -448,12 +447,12 @@ func findUpstream() (ConfigUpstream, error) {
 
 func configureUpstreamFromClient(client *Client) ConfigUpstream {
 	upstreamConfig := ConfigUpstream{}
-	upstreamConfig.Hostname = client.destHost
-	upstreamConfig.Port = client.destPort
-	upstreamConfig.TLS = client.destTLS
+	upstreamConfig.Hostname = client.DestHost
+	upstreamConfig.Port = client.DestPort
+	upstreamConfig.TLS = client.DestTLS
 	upstreamConfig.Timeout = Config.gatewayTimeout
 	upstreamConfig.Throttle = Config.gatewayThrottle
-	upstreamConfig.WebircPassword = findWebircPassword(client.destHost)
+	upstreamConfig.WebircPassword = findWebircPassword(client.DestHost)
 
 	return upstreamConfig
 }

@@ -1,4 +1,4 @@
-package main
+package webircgateway
 
 import (
 	"fmt"
@@ -29,17 +29,17 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		return nil
 	}
 
-	client.remoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
+	client.RemoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
 
-	clientHostnames, err := net.LookupAddr(client.remoteAddr)
+	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
 	if err != nil {
-		client.remoteHostname = client.remoteAddr
+		client.RemoteHostname = client.RemoteAddr
 	} else {
 		// FQDNs include a . at the end. Strip it out
-		client.remoteHostname = strings.Trim(clientHostnames[0], ".")
+		client.RemoteHostname = strings.Trim(clientHostnames[0], ".")
 	}
 
-	client.Log(2, "New kiwi channel from %s %s", client.remoteAddr, client.remoteHostname)
+	client.Log(2, "New kiwi channel from %s %s", client.RemoteAddr, client.RemoteHostname)
 
 	channel := Channel{
 		Id:           chanID,

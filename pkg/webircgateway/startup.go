@@ -1,15 +1,11 @@
-package main
+package webircgateway
 
 import (
 	"crypto/tls"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
 	"rsc.io/letsencrypt"
@@ -17,36 +13,11 @@ import (
 
 var (
 	// Version - The current version of webircgateway
-	Version    = "0.2.3"
+	Version    = "-"
 	identdServ identd.Server
 )
 
-func main() {
-	printVersion := flag.Bool("version", false, "Print the version")
-	configFile := flag.String("config", "config.conf", "Config file location")
-	runConfigTest := flag.Bool("test", false, "Just test the config file")
-	flag.Parse()
-
-	if *printVersion {
-		fmt.Println(Version)
-		os.Exit(0)
-	}
-
-	SetConfigFile(*configFile)
-	log.Printf("Using config %s", Config.configFile)
-
-	err := loadConfig()
-	if err != nil {
-		log.Printf("Config file error: %s", err.Error())
-		os.Exit(1)
-	}
-
-	if *runConfigTest {
-		log.Println("Config file is OK")
-		os.Exit(0)
-	}
-
-	watchForSignals()
+func Start() {
 	maybeStartStaticFileServer()
 	initListenerEngines()
 	startServers()
@@ -54,6 +25,27 @@ func main() {
 
 	justWait := make(chan bool)
 	<-justWait
+}
+
+func maybeStartIdentd() {
+	identdServ = identd.NewIdentdServer()
+
+	if Config.identd {
+		err := identdServ.Run()
+		if err != nil {
+			log.Printf("Error starting identd server: %s", err.Error())
+		} else {
+			log.Printf("Identd server started")
+		}
+	}
+}
+
+func maybeStartStaticFileServer() {
+	if Config.webroot != "" {
+		webroot := ConfigResolvePath(Config.webroot)
+		log.Printf("Serving files from %s", webroot)
+		http.Handle("/", http.FileServer(http.Dir(webroot)))
+	}
 }
 
 func initListenerEngines() {
@@ -76,27 +68,6 @@ func initListenerEngines() {
 
 	if !engineConfigured {
 		log.Fatal("No server engines configured")
-	}
-}
-
-func maybeStartIdentd() {
-	identdServ = identd.NewIdentdServer()
-
-	if Config.identd {
-		err := identdServ.Run()
-		if err != nil {
-			log.Printf("Error starting identd server: %s", err.Error())
-		} else {
-			log.Printf("Identd server started")
-		}
-	}
-}
-
-func maybeStartStaticFileServer() {
-	if Config.webroot != "" {
-		webroot := ConfigResolvePath(Config.webroot)
-		log.Printf("Serving files from %s", webroot)
-		http.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
 }
 
@@ -153,16 +124,4 @@ func startServer(conf ConfigServer) {
 		err := http.ListenAndServe(addr, nil)
 		log.Println(err)
 	}
-}
-
-func watchForSignals() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGHUP)
-	go func() {
-		for {
-			<-c
-			fmt.Println("Recieved SIGHUP, reloading config file")
-			loadConfig()
-		}
-	}()
 }
