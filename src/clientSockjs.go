@@ -1,6 +1,5 @@
 package main
 
-//import "gopkg.in/igm/sockjs-go.v2/sockjs"
 import (
 	"net"
 	"net/http"
