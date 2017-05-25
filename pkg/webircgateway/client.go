@@ -16,9 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kiwiirc/webircgateway/pkg/irc"
-
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
-
 	"golang.org/x/net/html/charset"
 )
 
@@ -141,6 +139,18 @@ func (c *Client) connectUpstream() {
 	} else {
 		client.Log(2, "Using client given upstream")
 		upstreamConfig = configureUpstreamFromClient(c)
+	}
+
+	hook := &HookIrcConnectionPre{
+		Client:         client,
+		UpstreamConfig: &upstreamConfig,
+	}
+	hook.Dispatch("irc.connection.pre")
+	if hook.Halt {
+		close(client.Send)
+		client.UpstreamSignal("closed")
+		client.StartShutdown("err_connecting_upstream")
+		return
 	}
 
 	if upstreamConfig.Proxy == nil {
@@ -338,12 +348,12 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		if Config.clientUsername != "" {
 			message.Params[0] = Config.clientUsername
-			message.Params[0] = strings.Replace(message.Params[0], "%i", ipv4ToHex(c.RemoteAddr), -1)
+			message.Params[0] = strings.Replace(message.Params[0], "%i", Ipv4ToHex(c.RemoteAddr), -1)
 			message.Params[0] = strings.Replace(message.Params[0], "%h", c.RemoteHostname, -1)
 		}
 		if Config.clientRealname != "" {
 			message.Params[3] = Config.clientRealname
-			message.Params[3] = strings.Replace(message.Params[3], "%i", ipv4ToHex(c.RemoteAddr), -1)
+			message.Params[3] = strings.Replace(message.Params[3], "%i", Ipv4ToHex(c.RemoteAddr), -1)
 			message.Params[3] = strings.Replace(message.Params[3], "%h", c.RemoteHostname, -1)
 		}
 
@@ -457,7 +467,7 @@ func configureUpstreamFromClient(client *Client) ConfigUpstream {
 	return upstreamConfig
 }
 
-func ipv4ToHex(ip string) string {
+func Ipv4ToHex(ip string) string {
 	var ipParts [4]int
 	fmt.Sscanf(ip, "%d.%d.%d.%d", &ipParts[0], &ipParts[1], &ipParts[2], &ipParts[3])
 	ipHex := fmt.Sprintf("%02x%02x%02x%02x", ipParts[0], ipParts[1], ipParts[2], ipParts[3])
