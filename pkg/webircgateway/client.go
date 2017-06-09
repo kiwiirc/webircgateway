@@ -264,6 +264,17 @@ func (c *Client) connectUpstream() {
 				)
 			}
 
+			hook := &HookIrcLine{
+				Client:         client,
+				UpstreamConfig: &upstreamConfig,
+				Line:           data,
+				ToServer:       true,
+			}
+			hook.Dispatch("irc.line")
+			if hook.Halt {
+				continue
+			}
+
 			client.Log(1, "->upstream: %s", data)
 			data = utf8ToOther(data, client.Encoding)
 			if data == "" {
@@ -288,6 +299,17 @@ func (c *Client) connectUpstream() {
 			data, err := reader.ReadString('\n')
 			if err != nil {
 				break
+			}
+
+			hook := &HookIrcLine{
+				Client:         client,
+				UpstreamConfig: &upstreamConfig,
+				Line:           data,
+				ToServer:       false,
+			}
+			hook.Dispatch("irc.line")
+			if hook.Halt {
+				continue
 			}
 
 			client.Log(1, "upstream->: %s", data)

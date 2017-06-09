@@ -21,7 +21,8 @@ type Hook struct {
 }
 
 func (h *Hook) getCallbacks(eventType string) []interface{} {
-	f := make([]interface{}, 0)
+	var f []interface{}
+	f = make([]interface{}, 0)
 
 	callbacks, exists := hooksRegistered[eventType]
 	if exists {
@@ -31,6 +32,10 @@ func (h *Hook) getCallbacks(eventType string) []interface{} {
 	return f
 }
 
+/**
+ * HookIrcConnectionPre
+ * Dispatched just before an IRC connection is attempted
+ */
 type HookIrcConnectionPre struct {
 	Hook
 	Client         *Client
@@ -40,6 +45,28 @@ type HookIrcConnectionPre struct {
 func (h *HookIrcConnectionPre) Dispatch(eventType string) {
 	for _, p := range h.getCallbacks(eventType) {
 		if f, ok := p.(func(*HookIrcConnectionPre)); ok {
+			f(h)
+		}
+	}
+}
+
+/**
+ * HookIrcLine
+ * Dispatched when either:
+ *   * A line arrives from the IRCd, before sending to the client
+ *   * A line arrives from the client, before sending to the IRCd
+ */
+type HookIrcLine struct {
+	Hook
+	Client         *Client
+	UpstreamConfig *ConfigUpstream
+	Line           string
+	ToServer       bool
+}
+
+func (h *HookIrcLine) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookIrcLine)); ok {
 			f(h)
 		}
 	}
