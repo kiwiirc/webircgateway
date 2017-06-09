@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
+	"github.com/orcaman/concurrent-map"
 )
 
 type Channel struct {
@@ -99,7 +100,7 @@ func kiwiircHTTPHandler() {
 }
 
 func kiwiircHandler(session sockjs.Session) {
-	channels := make(map[string]Channel)
+	channels := cmap.New()
 
 	// Read from sockjs
 	go func() {
@@ -110,19 +111,20 @@ func kiwiircHandler(session sockjs.Session) {
 				if idEnd == -1 {
 					// msg is in the form of ":chanId"
 					chanID := msg[1:]
-					_, channelExists := channels[chanID]
+
+					_, channelExists := channels.Get(chanID)
 					if !channelExists {
 						channel := makeChannel(chanID, session)
 						if channel == nil {
 							continue
 						}
-						channels[chanID] = *channel
+						channels.Set(chanID, *channel)
 
 						// When the channel closes, remove it from the map again
 						go func() {
 							<-channel.waitForClose
-							channels[chanID].Client.Log(2, "Removing channel from connection")
-							delete(channels, chanID)
+							channel.Client.Log(2, "Removing channel from connection")
+							channels.Remove(chanID)
 						}()
 					}
 
@@ -132,9 +134,11 @@ func kiwiircHandler(session sockjs.Session) {
 					// msg is in the form of ":chanId data"
 					chanID := msg[1:idEnd]
 					data := msg[idEnd+1:]
-					channel, channelExists := channels[chanID]
+
+					channel, channelExists := channels.Get(chanID)
 					if channelExists {
-						channel.handleIncomingLine(data)
+						c := channel.(Channel)
+						c.handleIncomingLine(data)
 					}
 				}
 			} else if err != nil {
@@ -143,8 +147,9 @@ func kiwiircHandler(session sockjs.Session) {
 			}
 		}
 
-		for _, channel := range channels {
-			channel.Client.StartShutdown("client_closed")
+		for channel := range channels.Iter() {
+			c := channel.Val.(Channel)
+			c.Client.StartShutdown("client_closed")
 		}
 	}()
 }

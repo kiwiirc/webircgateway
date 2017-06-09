@@ -16,6 +16,8 @@ case "$1" in
                 go get github.com/gobwas/glob
                 echo Downloading dependency: rsc.io/letsencrypt
                 go get rsc.io/letsencrypt
+                echo Downloading dependency: github.com/orcaman/concurrent-map
+                go get github.com/orcaman/concurrent-map
                 echo Complete!
                 ;;
 
