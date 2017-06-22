@@ -49,27 +49,31 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		waitForClose: make(chan bool),
 	}
 
-	go channel.lineWriter()
-	go channel.Start()
+	go channel.listenForSignals()
 
 	return &channel
 }
 
-func (c *Channel) Start() {
-	go func() {
-		for {
-			signal, stillOpen := <-c.Client.upstreamSignals
-			if !stillOpen {
-				break
-			} else if signal == "connected" {
+func (c *Channel) listenForSignals() {
+	for {
+		signal, ok := <-c.Client.Signals
+		if !ok {
+			break
+		}
+		c.Client.Log(1, "signal:%s %s", signal[0], signal[1])
+		if signal[0] == "state" {
+			if signal[1] == "connected" {
 				c.Conn.Send(fmt.Sprintf(":%s control connected", c.Id))
-			} else if signal == "closed" {
+			} else if signal[1] == "closed" {
 				c.Conn.Send(fmt.Sprintf(":%s control closed", c.Id))
 			}
 		}
-	}()
 
-	c.Client.Handle()
+		if signal[0] == "data" {
+			toSend := strings.Trim(signal[1], "\r\n")
+			c.Conn.Send(fmt.Sprintf(":%s %s", c.Id, toSend))
+		}
+	}
 
 	close(c.Client.Recv)
 	close(c.waitForClose)
@@ -77,21 +81,6 @@ func (c *Channel) Start() {
 
 func (c *Channel) handleIncomingLine(line string) {
 	c.Client.Recv <- line
-}
-
-func (c *Channel) lineWriter() {
-	client := c.Client
-
-	for {
-		line, ok := <-client.Send
-		if !ok {
-			break
-		}
-
-		toSend := strings.Trim(line, "\r\n")
-		client.Log(1, "->ws: %s", toSend)
-		c.Conn.Send(fmt.Sprintf(":%s %s", c.Id, toSend))
-	}
 }
 
 func kiwiircHTTPHandler() {

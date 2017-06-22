@@ -59,18 +59,17 @@ func sockjsHandler(session sockjs.Session) {
 		client.StartShutdown("client_closed")
 	}()
 
-	// Write to sockjs
-	go func() {
-		for {
-			line, ok := <-client.Send
-			if !ok {
-				break
-			}
+	// Process signals for the client
+	for {
+		signal, ok := <-client.Signals
+		if !ok {
+			break
+		}
 
+		if signal[0] == "data" {
+			line := strings.Trim(signal[1], "\r\n")
 			client.Log(1, "->ws: %s", line)
 			session.Send(line)
 		}
-	}()
-
-	client.Handle()
+	}
 }

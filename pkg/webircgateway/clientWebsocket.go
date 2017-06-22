@@ -67,23 +67,21 @@ func websocketHandler(ws *websocket.Conn) {
 		client.StartShutdown("client_closed")
 	}()
 
-	// Write to websocket
-	go func() {
-		for {
-			line, ok := <-client.Send
-			if !ok {
-				sendDrained.Done()
-				break
-			}
+	// Process signals for the client
+	for {
+		signal, ok := <-client.Signals
+		if !ok {
+			sendDrained.Done()
+			break
+		}
 
+		if signal[0] == "data" {
+			line := strings.Trim(signal[1], "\r\n")
 			client.Log(1, "->ws: %s", line)
 			ws.Write([]byte(line))
 		}
+	}
 
-		ws.Close()
-	}()
-
-	client.Handle()
 	sendDrained.Wait()
 	ws.Close()
 }

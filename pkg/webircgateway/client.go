@@ -20,15 +20,14 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
+type ClientSignal [2]string
+
 // Client - Connecting client struct
 type Client struct {
 	Id              int
 	ShuttingDown    bool
 	Recv            chan string
-	Send            chan string
 	UpstreamSend    chan string
-	signalClose     chan string
-	upstreamSignals chan string
 	UpstreamStarted bool
 	RemoteAddr      string
 	RemoteHostname  string
@@ -38,6 +37,8 @@ type Client struct {
 	DestTLS         bool
 	IrcState        irc.State
 	Encoding        string
+	// Signals for the transport to make use of (data, connection state, etc)
+	Signals chan ClientSignal
 }
 
 var nextClientID = 1
@@ -48,14 +49,15 @@ func NewClient() *Client {
 	nextClientID++
 
 	c := &Client{
-		Id:              thisID,
-		Recv:            make(chan string, 50),
-		Send:            make(chan string, 50),
-		UpstreamSend:    make(chan string, 50),
-		signalClose:     make(chan string),
-		upstreamSignals: make(chan string),
-		Encoding:        "UTF-8",
+		Id:           thisID,
+		Recv:         make(chan string, 50),
+		UpstreamSend: make(chan string, 50),
+		Encoding:     "UTF-8",
+		Signals:      make(chan ClientSignal, 50),
 	}
+
+	go c.clientLineWorker()
+
 	return c
 }
 
@@ -73,40 +75,25 @@ func (c *Client) StartShutdown(reason string) {
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.ShuttingDown)
 	if !c.ShuttingDown {
 		c.ShuttingDown = true
-		c.signalClose <- reason
-		close(c.signalClose)
-		close(c.upstreamSignals)
-	}
-}
-
-func (c *Client) UpstreamSignal(signal string) {
-	c.Log(1, "UpstreamSignal(%s) ShuttingDown=%t", signal, c.ShuttingDown)
-	if !c.ShuttingDown {
-		// Not all client transports listen for upstream signals, so don't block waiting
-		select {
-		case c.upstreamSignals <- signal:
+		switch reason {
+		case "upstream_closed":
+			c.Log(2, "Upstream closed the connection")
+		case "err_connecting_upstream":
+		case "err_no_upstream":
+			// Error has been logged already
+		case "client_closed":
+			c.Log(2, "Client disconnected")
 		default:
+			c.Log(2, "Closed: %s", reason)
 		}
+
+		close(c.Signals)
 	}
 }
 
-// Handle - Handle the lifetime of the client
-func (c *Client) Handle() {
-
-	go c.clientLineWorker()
-
-	closeReason := <-c.signalClose
-
-	switch closeReason {
-	case "upstream_closed":
-		c.Log(2, "Upstream closed the connection")
-	case "err_connecting_upstream":
-	case "err_no_upstream":
-		// Error has been logged already
-	case "client_closed":
-		c.Log(2, "Client disconnected")
-	default:
-		c.Log(2, "Closed: %s", closeReason)
+func (c *Client) SendClientSignal(signal string, arg string) {
+	if !c.ShuttingDown {
+		c.Signals <- ClientSignal{signal, arg}
 	}
 }
 
@@ -147,8 +134,7 @@ func (c *Client) connectUpstream() {
 	}
 	hook.Dispatch("irc.connection.pre")
 	if hook.Halt {
-		close(client.Send)
-		client.UpstreamSignal("closed")
+		client.SendClientSignal("state", "closed")
 		client.StartShutdown("err_connecting_upstream")
 		return
 	}
@@ -163,8 +149,7 @@ func (c *Client) connectUpstream() {
 
 		if connErr != nil {
 			client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
-			client.UpstreamSignal("closed")
-			close(client.Send)
+			client.SendClientSignal("state", "closed")
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
@@ -187,8 +172,7 @@ func (c *Client) connectUpstream() {
 			err := tlsConn.Handshake()
 			if err != nil {
 				client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
-				client.UpstreamSignal("closed")
-				close(client.Send)
+				client.SendClientSignal("state", "closed")
 				client.StartShutdown("err_connecting_upstream")
 				return
 			}
@@ -214,8 +198,7 @@ func (c *Client) connectUpstream() {
 
 		if dialErr != nil {
 			client.Log(3, "Error connecting to the kiwi proxy. %s", dialErr.Error())
-			client.UpstreamSignal("closed")
-			close(client.Send)
+			client.SendClientSignal("state", "closed")
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
@@ -237,7 +220,7 @@ func (c *Client) connectUpstream() {
 		client.Log(1, "No webirc to send")
 	}
 
-	client.UpstreamSignal("connected")
+	client.SendClientSignal("state", "connected")
 
 	// Data from client to upstream
 	go func() {
@@ -320,12 +303,11 @@ func (c *Client) connectUpstream() {
 				continue
 			}
 
-			client.Send <- data
+			client.SendClientSignal("data", data)
 		}
 
-		client.UpstreamSignal("closed")
+		client.SendClientSignal("state", "closed")
 		client.StartShutdown("upstream_closed")
-		close(client.Send)
 		upstream.Close()
 		if client.IrcState.RemotePort > 0 {
 			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort)
@@ -411,7 +393,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		addr := message.Params[0]
 		if addr == "" {
-			c.Send <- "ERROR :Missing host"
+			c.SendClientSignal("data", "ERROR :Missing host")
 			c.StartShutdown("missing_host")
 			return "", nil
 		}
