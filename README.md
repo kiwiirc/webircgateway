@@ -38,6 +38,13 @@ Included is a `webircgateway.sh` helper file to wrap building and running the pr
 ### Running
 Once compiled and you have a config file set, run `./websocketgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
 
+### Configuration location
+By default the configuration file is looked for in the current directly, ./config.conf. Use the --config parameter to specify a different location.
+
+You may also use a shell command to load your config by prefixing the config option with "$ " like so: --config="$ curl http://example.com/config.conf". Great if you want to remotely include a config file or load it from a service like etcd.
+
+Note: All filenames within the configuration file are relative to the configuration file itself unless the filename starts with "/" which makes it an absolute path.
+
 ### Recommendations
 To ensure web clients can connect to your network and to try keep some consistency between networks:
 
