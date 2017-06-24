@@ -48,13 +48,6 @@ To ensure web clients can connect to your network and to try keep some consisten
 5. If your network uses `irc.network.org`, use `ws.network.org` to point to your webircgateway.
 6. Although available, disable identd lookups for webircgateway clients. There are no benefits while potentially slowing the connection down.
 
-### TODO
-Several TODO items are added to the Github issue tracker.
-* Pre-built binaries
-* Documentation on how best to distribute and handle configuration files
-* Encoding/decoding to the IRCd while keeping UTF8 to the websocket clients
-* IdentD support (Ideally the IRCd should disable IdentD lookups for web clients as it's pointless)
-
 ### License
 ~~~
    Copyright 2017 Kiwi IRC
