@@ -105,7 +105,9 @@ func createMask(maskStr string) *Mask {
 }
 
 // ParseLine - Turn a raw IRC line into a message
-func ParseLine(line string) (*Message, error) {
+func ParseLine(input string) (*Message, error) {
+	line := strings.Trim(input, "\r\n")
+
 	message := &Message{
 		Raw:  line,
 		Tags: make(map[string]string),
