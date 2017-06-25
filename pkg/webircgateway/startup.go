@@ -82,6 +82,28 @@ func startServers() {
 		w.Write(out)
 	})
 
+	http.HandleFunc("/webirc/_status", func(w http.ResponseWriter, r *http.Request) {
+		if GetRemoteAddressFromRequest(r).String() != "127.0.0.1" {
+			w.WriteHeader(403)
+			return
+		}
+
+		out := ""
+		for item := range clients.Iter() {
+			c := item.Val.(*Client)
+			out += fmt.Sprintf(
+				"%s %s %s %s!%s\n",
+				c.RemoteAddr,
+				c.RemoteHostname,
+				c.State,
+				c.IrcState.Nick,
+				c.IrcState.Username,
+			)
+		}
+
+		w.Write([]byte(out))
+	})
+
 	for _, server := range Config.servers {
 		go startServer(server)
 	}

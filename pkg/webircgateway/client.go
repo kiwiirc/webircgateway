@@ -15,8 +15,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"sync"
+
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
+	"github.com/orcaman/concurrent-map"
 	"golang.org/x/net/html/charset"
 )
 
@@ -25,6 +28,8 @@ type ClientSignal [2]string
 // Client - Connecting client struct
 type Client struct {
 	Id              int
+	State           string
+	EndWG           sync.WaitGroup
 	ShuttingDown    bool
 	Recv            chan string
 	UpstreamSend    chan string
@@ -41,6 +46,7 @@ type Client struct {
 	Signals chan ClientSignal
 }
 
+var clients = cmap.New()
 var nextClientID = 1
 
 // NewClient - Makes a new client
@@ -50,6 +56,7 @@ func NewClient() *Client {
 
 	c := &Client{
 		Id:           thisID,
+		State:        "idle",
 		Recv:         make(chan string, 50),
 		UpstreamSend: make(chan string, 50),
 		Encoding:     "UTF-8",
@@ -57,6 +64,15 @@ func NewClient() *Client {
 	}
 
 	go c.clientLineWorker()
+
+	// Add to the clients maps and wait until everything has been marked
+	// as completed (several routines add themselves to EndWG so that we can catch
+	// when they are all completed)
+	clients.Set(string(c.Id), c)
+	go func() {
+		c.EndWG.Wait()
+		clients.Remove(string(c.Id))
+	}()
 
 	return c
 }
@@ -75,6 +91,8 @@ func (c *Client) StartShutdown(reason string) {
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.ShuttingDown)
 	if !c.ShuttingDown {
 		c.ShuttingDown = true
+		c.State = "ending"
+
 		switch reason {
 		case "upstream_closed":
 			c.Log(2, "Upstream closed the connection")
@@ -138,6 +156,8 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("err_connecting_upstream")
 		return
 	}
+
+	client.State = "connecting"
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -206,6 +226,8 @@ func (c *Client) connectUpstream() {
 		upstream = ConnInterface(conn)
 	}
 
+	client.State = "registering"
+
 	// Send any WEBIRC lines
 	if upstreamConfig.WebircPassword != "" {
 		webircLine := fmt.Sprintf(
@@ -224,6 +246,11 @@ func (c *Client) connectUpstream() {
 
 	// Data from client to upstream
 	go func() {
+		client.EndWG.Add(1)
+		defer func() {
+			client.EndWG.Done()
+		}()
+
 		var writeThrottle time.Duration
 		if upstreamConfig.Throttle > 0 {
 			writeThrottle = time.Duration(int64(time.Second) / int64(upstreamConfig.Throttle))
@@ -277,6 +304,11 @@ func (c *Client) connectUpstream() {
 
 	// Data from upstream to client
 	go func() {
+		client.EndWG.Add(1)
+		defer func() {
+			client.EndWG.Done()
+		}()
+
 		reader := bufio.NewReader(upstream)
 		for {
 			data, err := reader.ReadString('\n')
@@ -303,6 +335,15 @@ func (c *Client) connectUpstream() {
 				continue
 			}
 
+			m, _ := irc.ParseLine(data)
+			if m != nil && m.Command == "NICK" {
+				client.IrcState.Nick = m.Params[0]
+			}
+			if m != nil && m.Command == "001" {
+				client.IrcState.Nick = m.Params[0]
+				client.State = "connected"
+			}
+
 			client.SendClientSignal("data", data)
 		}
 
@@ -317,6 +358,11 @@ func (c *Client) connectUpstream() {
 
 // Handle lines sent from the client
 func (c *Client) clientLineWorker() {
+	c.EndWG.Add(1)
+	defer func() {
+		c.EndWG.Done()
+	}()
+
 	for {
 		data, ok := <-c.Recv
 		if !ok {
