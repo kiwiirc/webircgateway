@@ -142,8 +142,14 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
-		client.Log(2, "Using client given upstream")
-		upstreamConfig = configureUpstreamFromClient(c)
+		if !isClientDestinationAllowed(client.DestHost) {
+			client.Log(2, "Destination Server %s is not allowed. Closing connection", client.DestHost)
+			client.StartShutdown("err_no_upstream")
+			return
+		} else {
+			client.Log(2, "Using client given upstream")
+			upstreamConfig = configureUpstreamFromClient(c)
+		}
 	}
 
 	hook := &HookIrcConnectionPre{
@@ -484,6 +490,24 @@ func isClientOriginAllowed(originHeader string) bool {
 
 	for _, originMatch := range Config.remoteOrigins {
 		if originMatch.Match(originHeader) {
+			foundMatch = true
+			break
+		}
+	}
+
+	return foundMatch
+}
+
+func isClientDestinationAllowed(destinationHeader string) bool {
+	// Empty list of destinations = all destinations allowed
+	if len(Config.remoteDestinations) == 0 {
+		return true
+	}
+
+	foundMatch := false
+
+	for _, originMatch := range Config.remoteDestinations {
+		if originMatch.Match(destinationHeader) {
 			foundMatch = true
 			break
 		}

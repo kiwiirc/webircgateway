@@ -74,6 +74,10 @@ enabled = false
 timeout = 5
 throttle = 2
 
+# irc servers (hostnames) that are connectable via the gateway
+# No entries here will allow connections to any server.
+[gateway.allowed]
+#example.com
 
 [gateway.webirc]
 irc.network.org = webirc_password
