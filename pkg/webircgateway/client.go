@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -79,12 +78,8 @@ func NewClient() *Client {
 
 // Log - Log a line of text with context of this client
 func (c *Client) Log(level int, format string, args ...interface{}) {
-	if level < Config.LogLevel {
-		return
-	}
-
-	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
-	log.Printf("%s client:%d %s", levels[level-1], c.Id, fmt.Sprintf(format, args...))
+	prefix := fmt.Sprintf("client:%d ", c.Id)
+	logOut(level, prefix+format, args...)
 }
 
 func (c *Client) StartShutdown(reason string) {

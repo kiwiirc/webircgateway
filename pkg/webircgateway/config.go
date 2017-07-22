@@ -1,7 +1,6 @@
 package webircgateway
 
 import (
-	"log"
 	"net"
 	"os/exec"
 	"path/filepath"
@@ -120,7 +119,7 @@ func LoadConfig() error {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
 			Config.LogLevel = section.Key("logLevel").MustInt(3)
 			if Config.LogLevel < 1 || Config.LogLevel > 3 {
-				log.Println("Config option logLevel must be between 1-3. Setting default value of 3.")
+				logOut(3, "Config option logLevel must be between 1-3. Setting default value of 3.")
 				Config.LogLevel = 3
 			}
 
@@ -184,7 +183,7 @@ func LoadConfig() error {
 			for _, origin := range section.KeyStrings() {
 				match, err := glob.Compile(origin)
 				if err != nil {
-					log.Println("Config section allowed_origins has invalid match, " + origin)
+					logOut(3, "Config section allowed_origins has invalid match, "+origin)
 					continue
 				}
 				Config.RemoteOrigins = append(Config.RemoteOrigins, match)
@@ -195,7 +194,7 @@ func LoadConfig() error {
 			for _, origin := range section.KeyStrings() {
 				match, err := glob.Compile(origin)
 				if err != nil {
-					log.Println("Config section gateway.whitelist has invalid match, " + origin)
+					logOut(3, "Config section gateway.whitelist has invalid match, "+origin)
 					continue
 				}
 				Config.GatewayWhitelist = append(Config.GatewayWhitelist, match)
@@ -206,7 +205,7 @@ func LoadConfig() error {
 			for _, cidrRange := range section.KeyStrings() {
 				_, validRange, cidrErr := net.ParseCIDR(cidrRange)
 				if cidrErr != nil {
-					log.Println("Config section reverse_proxies has invalid entry, " + cidrRange)
+					logOut(3, "Config section reverse_proxies has invalid entry, "+cidrRange)
 					continue
 				}
 				Config.ReverseProxies = append(Config.ReverseProxies, *validRange)

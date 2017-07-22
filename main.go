@@ -28,6 +28,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Print any webircgateway logout to STDOUT
+	go printLogOutput()
+
 	webircgateway.SetConfigFile(*configFile)
 	log.Printf("Using config %s", webircgateway.CurrentConfigFile())
 
@@ -44,7 +47,7 @@ func main() {
 	}
 
 	watchForSignals()
-	webircgateway.Init()
+	webircgateway.Prepare()
 	webircgateway.Listen()
 
 	justWait := make(chan bool)
@@ -61,4 +64,11 @@ func watchForSignals() {
 			webircgateway.LoadConfig()
 		}
 	}()
+}
+
+func printLogOutput() {
+	for {
+		line, _ := <-webircgateway.LogOutput
+		log.Println(line)
+	}
 }

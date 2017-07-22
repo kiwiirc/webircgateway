@@ -2,7 +2,6 @@ package webircgateway
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -131,7 +130,7 @@ func kiwiircHandler(session sockjs.Session) {
 					}
 				}
 			} else if err != nil {
-				log.Printf("kiwi connection closed (%s)", err.Error())
+				logOut(1, "kiwi connection closed (%s)", err.Error())
 				break
 			}
 		}

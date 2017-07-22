@@ -4,8 +4,9 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+
+	"errors"
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
 	"rsc.io/letsencrypt"
@@ -16,11 +17,15 @@ var (
 	Version    = "-"
 	identdServ identd.Server
 	HttpRouter *http.ServeMux
+	LogOutput  chan string
 )
 
-func Init() {
+func init() {
 	HttpRouter = http.NewServeMux()
+	LogOutput = make(chan string, 5)
+}
 
+func Prepare() {
 	maybeStartStaticFileServer()
 	initHttpRoutes()
 	maybeStartIdentd()
@@ -32,9 +37,9 @@ func maybeStartIdentd() {
 	if Config.Identd {
 		err := identdServ.Run()
 		if err != nil {
-			log.Printf("Error starting identd server: %s", err.Error())
+			logOut(3, "Error starting identd server: %s", err.Error())
 		} else {
-			log.Printf("Identd server started")
+			logOut(2, "Identd server started")
 		}
 	}
 }
@@ -42,12 +47,12 @@ func maybeStartIdentd() {
 func maybeStartStaticFileServer() {
 	if Config.Webroot != "" {
 		webroot := ConfigResolvePath(Config.Webroot)
-		log.Printf("Serving files from %s", webroot)
+		logOut(2, "Serving files from %s", webroot)
 		http.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
 }
 
-func initHttpRoutes() {
+func initHttpRoutes() error {
 	// Add all the transport routes
 	engineConfigured := false
 	for _, serverEngine := range Config.ServerEngines {
@@ -62,12 +67,13 @@ func initHttpRoutes() {
 			sockjsHTTPHandler(HttpRouter)
 			engineConfigured = true
 		default:
-			log.Printf("Invalid server engine: '%s'", serverEngine)
+			logOut(3, "Invalid server engine: '%s'", serverEngine)
 		}
 	}
 
 	if !engineConfigured {
-		log.Fatal("No server engines configured")
+		logOut(3, "No server engines configured")
+		return errors.New("No server engines configured")
 	}
 
 	// Add some general server info about this webircgateway instance
@@ -101,6 +107,8 @@ func initHttpRoutes() {
 
 		w.Write([]byte(out))
 	})
+
+	return nil
 }
 
 func Listen() {
@@ -109,30 +117,43 @@ func Listen() {
 	}
 }
 
+func logOut(level int, format string, args ...interface{}) {
+	if level < Config.LogLevel {
+		return
+	}
+
+	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
+	line := fmt.Sprintf(levels[level-1]+" "+format, args)
+
+	select {
+	case LogOutput <- line:
+	}
+}
+
 func startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
 	if conf.TLS && conf.LetsEncryptCacheFile == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
-			log.Println("'cert' and 'key' options must be set for TLS servers")
+			logOut(3, "'cert' and 'key' options must be set for TLS servers")
 			return
 		}
 
 		tlsCert := ConfigResolvePath(conf.CertFile)
 		tlsKey := ConfigResolvePath(conf.KeyFile)
 
-		log.Printf("Listening with TLS on %s", addr)
+		logOut(2, "Listening with TLS on %s", addr)
 		err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, HttpRouter)
 		if err != nil {
-			log.Printf("Failed to listen with TLS: %s", err.Error())
+			logOut(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheFile != "" {
 		m := letsencrypt.Manager{}
 		err := m.CacheFile(conf.LetsEncryptCacheFile)
 		if err != nil {
-			log.Printf("Failed to listen with letsencrypt TLS: %s", err.Error())
+			logOut(3, "Failed to listen with letsencrypt TLS: %s", err.Error())
 		}
-		log.Printf("Listening with letsencrypt TLS on %s", addr)
+		logOut(2, "Listening with letsencrypt TLS on %s", addr)
 		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
@@ -141,10 +162,10 @@ func startServer(conf ConfigServer) {
 			Handler: HttpRouter,
 		}
 		err = srv.ListenAndServeTLS("", "")
-		log.Printf("Listening with letsencrypt failed: %s", err.Error())
+		logOut(3, "Listening with letsencrypt failed: %s", err.Error())
 	} else {
-		log.Printf("Listening on %s", addr)
+		logOut(2, "Listening on %s", addr)
 		err := http.ListenAndServe(addr, HttpRouter)
-		log.Println(err)
+		logOut(3, err.Error())
 	}
 }
