@@ -142,6 +142,13 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
+		if !isIrcAddressAllowed(client.DestHost) {
+			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
+			client.SendClientSignal("state", "closed")
+			client.StartShutdown("err_no_upstream")
+			return
+		}
+
 		client.Log(2, "Using client given upstream")
 		upstreamConfig = configureUpstreamFromClient(c)
 	}
@@ -484,6 +491,24 @@ func isClientOriginAllowed(originHeader string) bool {
 
 	for _, originMatch := range Config.remoteOrigins {
 		if originMatch.Match(originHeader) {
+			foundMatch = true
+			break
+		}
+	}
+
+	return foundMatch
+}
+
+func isIrcAddressAllowed(addr string) bool {
+	// Empty whitelist = all destinations allowed
+	if len(Config.gatewayWhitelist) == 0 {
+		return true
+	}
+
+	foundMatch := false
+
+	for _, addrMatch := range Config.gatewayWhitelist {
+		if addrMatch.Match(addr) {
 			foundMatch = true
 			break
 		}

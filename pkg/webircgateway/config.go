@@ -46,6 +46,7 @@ var Config struct {
 	configFile            string
 	logLevel              int
 	gateway               bool
+	gatewayWhitelist      []glob.Glob
 	gatewayThrottle       int
 	gatewayTimeout        int
 	gatewayWebircPassword map[string]string
@@ -111,6 +112,7 @@ func LoadConfig() error {
 	Config.servers = []ConfigServer{}
 	Config.serverEngines = []string{}
 	Config.remoteOrigins = []glob.Glob{}
+	Config.gatewayWhitelist = []glob.Glob{}
 	Config.reverseProxies = []net.IPNet{}
 	Config.webroot = ""
 
@@ -186,6 +188,17 @@ func LoadConfig() error {
 					continue
 				}
 				Config.remoteOrigins = append(Config.remoteOrigins, match)
+			}
+		}
+
+		if strings.Index(section.Name(), "gateway.whitelist") == 0 {
+			for _, origin := range section.KeyStrings() {
+				match, err := glob.Compile(origin)
+				if err != nil {
+					log.Println("Config section gateway.whitelist has invalid match, " + origin)
+					continue
+				}
+				Config.gatewayWhitelist = append(Config.gatewayWhitelist, match)
 			}
 		}
 
