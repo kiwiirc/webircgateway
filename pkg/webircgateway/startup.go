@@ -123,7 +123,7 @@ func logOut(level int, format string, args ...interface{}) {
 	}
 
 	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
-	line := fmt.Sprintf(levels[level-1]+" "+format, args)
+	line := fmt.Sprintf(levels[level-1]+" "+format, args...)
 
 	select {
 	case LogOutput <- line:
