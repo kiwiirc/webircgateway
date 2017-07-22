@@ -83,9 +83,9 @@ func (c *Channel) handleIncomingLine(line string) {
 	c.Client.Recv <- line
 }
 
-func kiwiircHTTPHandler() {
+func kiwiircHTTPHandler(router *http.ServeMux) {
 	handler := sockjs.NewHandler("/webirc/kiwiirc", sockjs.DefaultOptions, kiwiircHandler)
-	http.Handle("/webirc/kiwiirc/", handler)
+	router.Handle("/webirc/kiwiirc/", handler)
 }
 
 func kiwiircHandler(session sockjs.Session) {

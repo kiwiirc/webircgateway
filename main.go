@@ -44,7 +44,11 @@ func main() {
 	}
 
 	watchForSignals()
-	webircgateway.Start()
+	webircgateway.Init()
+	webircgateway.Listen()
+
+	justWait := make(chan bool)
+	<-justWait
 }
 
 func watchForSignals() {

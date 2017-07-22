@@ -79,7 +79,7 @@ func NewClient() *Client {
 
 // Log - Log a line of text with context of this client
 func (c *Client) Log(level int, format string, args ...interface{}) {
-	if level < Config.logLevel {
+	if level < Config.LogLevel {
 		return
 	}
 
@@ -183,7 +183,7 @@ func (c *Client) connectUpstream() {
 
 		// Add the ports into the identd before possible TLS handshaking. If we do it after then
 		// there's a good chance the identd lookup will occur before the handshake has finished
-		if Config.identd {
+		if Config.Identd {
 			// Keep track of the upstreams local and remote port numbers
 			_, lPortStr, _ := net.SplitHostPort(conn.LocalAddr().String())
 			client.IrcState.LocalPort, _ = strconv.Atoi(lPortStr)
@@ -403,13 +403,13 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 			return line, errors.New("Invalid USER line")
 		}
 
-		if Config.clientUsername != "" {
-			message.Params[0] = Config.clientUsername
+		if Config.ClientUsername != "" {
+			message.Params[0] = Config.ClientUsername
 			message.Params[0] = strings.Replace(message.Params[0], "%i", Ipv4ToHex(c.RemoteAddr), -1)
 			message.Params[0] = strings.Replace(message.Params[0], "%h", c.RemoteHostname, -1)
 		}
-		if Config.clientRealname != "" {
-			message.Params[3] = Config.clientRealname
+		if Config.ClientRealname != "" {
+			message.Params[3] = Config.ClientRealname
 			message.Params[3] = strings.Replace(message.Params[3], "%i", Ipv4ToHex(c.RemoteAddr), -1)
 			message.Params[3] = strings.Replace(message.Params[3], "%h", c.RemoteHostname, -1)
 		}
@@ -440,7 +440,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		// HOST irc.network.net:6667
 		// HOST irc.network.net:+6667
 
-		if !Config.gateway {
+		if !Config.Gateway {
 			return "", nil
 		}
 
@@ -483,13 +483,13 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 func isClientOriginAllowed(originHeader string) bool {
 	// Empty list of origins = all origins allowed
-	if len(Config.remoteOrigins) == 0 {
+	if len(Config.RemoteOrigins) == 0 {
 		return true
 	}
 
 	foundMatch := false
 
-	for _, originMatch := range Config.remoteOrigins {
+	for _, originMatch := range Config.RemoteOrigins {
 		if originMatch.Match(originHeader) {
 			foundMatch = true
 			break
@@ -501,13 +501,13 @@ func isClientOriginAllowed(originHeader string) bool {
 
 func isIrcAddressAllowed(addr string) bool {
 	// Empty whitelist = all destinations allowed
-	if len(Config.gatewayWhitelist) == 0 {
+	if len(Config.GatewayWhitelist) == 0 {
 		return true
 	}
 
 	foundMatch := false
 
-	for _, addrMatch := range Config.gatewayWhitelist {
+	for _, addrMatch := range Config.GatewayWhitelist {
 		if addrMatch.Match(addr) {
 			foundMatch = true
 			break
@@ -520,12 +520,12 @@ func isIrcAddressAllowed(addr string) bool {
 func findUpstream() (ConfigUpstream, error) {
 	var ret ConfigUpstream
 
-	if len(Config.upstreams) == 0 {
+	if len(Config.Upstreams) == 0 {
 		return ret, errors.New("No upstreams available")
 	}
 
-	randIdx := rand.Intn(len(Config.upstreams))
-	ret = Config.upstreams[randIdx]
+	randIdx := rand.Intn(len(Config.Upstreams))
+	ret = Config.Upstreams[randIdx]
 
 	return ret, nil
 }
@@ -535,8 +535,8 @@ func configureUpstreamFromClient(client *Client) ConfigUpstream {
 	upstreamConfig.Hostname = client.DestHost
 	upstreamConfig.Port = client.DestPort
 	upstreamConfig.TLS = client.DestTLS
-	upstreamConfig.Timeout = Config.gatewayTimeout
-	upstreamConfig.Throttle = Config.gatewayThrottle
+	upstreamConfig.Timeout = Config.GatewayTimeout
+	upstreamConfig.Throttle = Config.GatewayThrottle
 	upstreamConfig.WebircPassword = findWebircPassword(client.DestHost)
 
 	return upstreamConfig
@@ -550,7 +550,7 @@ func Ipv4ToHex(ip string) string {
 }
 
 func findWebircPassword(ircHost string) string {
-	pass, exists := Config.gatewayWebircPassword[strings.ToLower(ircHost)]
+	pass, exists := Config.GatewayWebircPassword[strings.ToLower(ircHost)]
 	if !exists {
 		pass = ""
 	}
@@ -593,7 +593,7 @@ func GetRemoteAddressFromRequest(req *http.Request) net.IP {
 	remoteIP := net.ParseIP(remoteAddr)
 
 	isInRange := false
-	for _, cidrRange := range Config.reverseProxies {
+	for _, cidrRange := range Config.ReverseProxies {
 		if cidrRange.Contains(remoteIP) {
 			isInRange = true
 			break

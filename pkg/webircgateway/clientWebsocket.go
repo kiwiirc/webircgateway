@@ -9,8 +9,8 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-func websocketHTTPHandler() {
-	http.Handle("/webirc/websocket/", websocket.Handler(websocketHandler))
+func websocketHTTPHandler(router *http.ServeMux) {
+	router.Handle("/webirc/websocket/", websocket.Handler(websocketHandler))
 }
 
 func websocketHandler(ws *websocket.Conn) {

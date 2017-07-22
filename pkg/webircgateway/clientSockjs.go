@@ -8,9 +8,9 @@ import (
 	"github.com/igm/sockjs-go/sockjs"
 )
 
-func sockjsHTTPHandler() {
+func sockjsHTTPHandler(router *http.ServeMux) {
 	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, sockjsHandler)
-	http.Handle("/webirc/sockjs/", sockjsHandler)
+	router.Handle("/webirc/sockjs/", sockjsHandler)
 }
 
 func sockjsHandler(session sockjs.Session) {

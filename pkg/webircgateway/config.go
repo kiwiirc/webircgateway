@@ -43,22 +43,22 @@ type ConfigProxy struct {
 
 // Config - Config options for the running app
 var Config struct {
-	configFile            string
-	logLevel              int
-	gateway               bool
-	gatewayWhitelist      []glob.Glob
-	gatewayThrottle       int
-	gatewayTimeout        int
-	gatewayWebircPassword map[string]string
-	upstreams             []ConfigUpstream
-	servers               []ConfigServer
-	serverEngines         []string
-	remoteOrigins         []glob.Glob
-	reverseProxies        []net.IPNet
-	webroot               string
-	clientRealname        string
-	clientUsername        string
-	identd                bool
+	ConfigFile            string
+	LogLevel              int
+	Gateway               bool
+	GatewayWhitelist      []glob.Glob
+	GatewayThrottle       int
+	GatewayTimeout        int
+	GatewayWebircPassword map[string]string
+	Upstreams             []ConfigUpstream
+	Servers               []ConfigServer
+	ServerEngines         []string
+	RemoteOrigins         []glob.Glob
+	ReverseProxies        []net.IPNet
+	Webroot               string
+	ClientRealname        string
+	ClientUsername        string
+	Identd                bool
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -68,36 +68,36 @@ func ConfigResolvePath(path string) string {
 		return path
 	}
 
-	resolved := filepath.Dir(Config.configFile)
+	resolved := filepath.Dir(Config.ConfigFile)
 	resolved = filepath.Clean(resolved + "/" + path)
 	return resolved
 }
 
-func SetConfigFile(configFile string) {
+func SetConfigFile(ConfigFile string) {
 	// Config paths starting with $ is executed rather than treated as a path
-	if strings.HasPrefix(configFile, "$ ") {
-		Config.configFile = configFile
+	if strings.HasPrefix(ConfigFile, "$ ") {
+		Config.ConfigFile = ConfigFile
 	} else {
-		Config.configFile, _ = filepath.Abs(configFile)
+		Config.ConfigFile, _ = filepath.Abs(ConfigFile)
 	}
 }
 
 // CurrentConfigFile - Return the full path or command for the config file in use
 func CurrentConfigFile() string {
-	return Config.configFile
+	return Config.ConfigFile
 }
 func LoadConfig() error {
 	var configSrc interface{}
 
-	if strings.HasPrefix(Config.configFile, "$ ") {
-		cmdRawOut, err := exec.Command("sh", "-c", Config.configFile[2:]).Output()
+	if strings.HasPrefix(Config.ConfigFile, "$ ") {
+		cmdRawOut, err := exec.Command("sh", "-c", Config.ConfigFile[2:]).Output()
 		if err != nil {
 			return err
 		}
 
 		configSrc = cmdRawOut
 	} else {
-		configSrc = Config.configFile
+		configSrc = Config.ConfigFile
 	}
 
 	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, configSrc)
@@ -106,47 +106,47 @@ func LoadConfig() error {
 	}
 
 	// Clear the existing config
-	Config.gateway = false
-	Config.gatewayWebircPassword = make(map[string]string)
-	Config.upstreams = []ConfigUpstream{}
-	Config.servers = []ConfigServer{}
-	Config.serverEngines = []string{}
-	Config.remoteOrigins = []glob.Glob{}
-	Config.gatewayWhitelist = []glob.Glob{}
-	Config.reverseProxies = []net.IPNet{}
-	Config.webroot = ""
+	Config.Gateway = false
+	Config.GatewayWebircPassword = make(map[string]string)
+	Config.Upstreams = []ConfigUpstream{}
+	Config.Servers = []ConfigServer{}
+	Config.ServerEngines = []string{}
+	Config.RemoteOrigins = []glob.Glob{}
+	Config.GatewayWhitelist = []glob.Glob{}
+	Config.ReverseProxies = []net.IPNet{}
+	Config.Webroot = ""
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
-			Config.logLevel = section.Key("logLevel").MustInt(3)
-			if Config.logLevel < 1 || Config.logLevel > 3 {
+			Config.LogLevel = section.Key("logLevel").MustInt(3)
+			if Config.LogLevel < 1 || Config.LogLevel > 3 {
 				log.Println("Config option logLevel must be between 1-3. Setting default value of 3.")
-				Config.logLevel = 3
+				Config.LogLevel = 3
 			}
 
-			Config.identd = section.Key("identd").MustBool(false)
+			Config.Identd = section.Key("identd").MustBool(false)
 		}
 
 		if section.Name() == "gateway" {
-			Config.gateway = section.Key("enabled").MustBool(false)
-			Config.gatewayTimeout = section.Key("timeout").MustInt(10)
-			Config.gatewayThrottle = section.Key("throttle").MustInt(2)
+			Config.Gateway = section.Key("enabled").MustBool(false)
+			Config.GatewayTimeout = section.Key("timeout").MustInt(10)
+			Config.GatewayThrottle = section.Key("throttle").MustInt(2)
 		}
 
 		if section.Name() == "gateway.webirc" {
 			for _, serverAddr := range section.KeyStrings() {
-				Config.gatewayWebircPassword[serverAddr] = section.Key(serverAddr).MustString("")
+				Config.GatewayWebircPassword[serverAddr] = section.Key(serverAddr).MustString("")
 			}
 		}
 
 		if strings.Index(section.Name(), "clients") == 0 {
-			Config.clientUsername = section.Key("username").MustString("")
-			Config.clientRealname = section.Key("realname").MustString("")
+			Config.ClientUsername = section.Key("username").MustString("")
+			Config.ClientRealname = section.Key("realname").MustString("")
 		}
 
 		if strings.Index(section.Name(), "fileserving") == 0 {
 			if section.Key("enabled").MustBool(false) {
-				Config.webroot = section.Key("webroot").MustString("")
+				Config.Webroot = section.Key("webroot").MustString("")
 			}
 		}
 
@@ -159,7 +159,7 @@ func LoadConfig() error {
 			server.KeyFile = section.Key("key").MustString("")
 			server.LetsEncryptCacheFile = section.Key("letsencrypt_cache").MustString("")
 
-			Config.servers = append(Config.servers, server)
+			Config.Servers = append(Config.Servers, server)
 		}
 
 		if strings.Index(section.Name(), "upstream.") == 0 {
@@ -171,12 +171,12 @@ func LoadConfig() error {
 			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
 
-			Config.upstreams = append(Config.upstreams, upstream)
+			Config.Upstreams = append(Config.Upstreams, upstream)
 		}
 
 		if strings.Index(section.Name(), "engines") == 0 {
 			for _, engine := range section.KeyStrings() {
-				Config.serverEngines = append(Config.serverEngines, strings.Trim(engine, "\n"))
+				Config.ServerEngines = append(Config.ServerEngines, strings.Trim(engine, "\n"))
 			}
 		}
 
@@ -187,7 +187,7 @@ func LoadConfig() error {
 					log.Println("Config section allowed_origins has invalid match, " + origin)
 					continue
 				}
-				Config.remoteOrigins = append(Config.remoteOrigins, match)
+				Config.RemoteOrigins = append(Config.RemoteOrigins, match)
 			}
 		}
 
@@ -198,7 +198,7 @@ func LoadConfig() error {
 					log.Println("Config section gateway.whitelist has invalid match, " + origin)
 					continue
 				}
-				Config.gatewayWhitelist = append(Config.gatewayWhitelist, match)
+				Config.GatewayWhitelist = append(Config.GatewayWhitelist, match)
 			}
 		}
 
@@ -209,7 +209,7 @@ func LoadConfig() error {
 					log.Println("Config section reverse_proxies has invalid entry, " + cidrRange)
 					continue
 				}
-				Config.reverseProxies = append(Config.reverseProxies, *validRange)
+				Config.ReverseProxies = append(Config.ReverseProxies, *validRange)
 			}
 		}
 	}
