@@ -68,16 +68,18 @@ webirc = ""
 
 
 # A public gateway to any IRC network
-# If enabled, Kiwi IRC clients may connect to any IRC network through the kiwiirc engine
+# If enabled, Kiwi IRC clients may connect to any IRC network (or a whitelisted
+# network below) through the kiwiirc engine
 [gateway]
 enabled = false
 timeout = 5
 throttle = 2
 
-# irc servers (hostnames) that are connectable via the gateway
-# No entries here will allow connections to any server.
-[gateway.allowed]
-#example.com
+# Whitelisted IRC networks while in public gateway mode
+# If any networks are in this list then connections can only be made to these
+[gateway.whitelist]
+#irc.example.com
+#*.example2.com
 
 [gateway.webirc]
 irc.network.org = webirc_password

@@ -142,14 +142,15 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
-		if !isClientDestinationAllowed(client.DestHost) {
-			client.Log(2, "Destination Server %s is not allowed. Closing connection", client.DestHost)
+		if !isIrcAddressAllowed(client.DestHost) {
+			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
+			client.SendClientSignal("state", "closed")
 			client.StartShutdown("err_no_upstream")
 			return
-		} else {
-			client.Log(2, "Using client given upstream")
-			upstreamConfig = configureUpstreamFromClient(c)
 		}
+
+		client.Log(2, "Using client given upstream")
+		upstreamConfig = configureUpstreamFromClient(c)
 	}
 
 	hook := &HookIrcConnectionPre{
@@ -498,16 +499,16 @@ func isClientOriginAllowed(originHeader string) bool {
 	return foundMatch
 }
 
-func isClientDestinationAllowed(destinationHeader string) bool {
-	// Empty list of destinations = all destinations allowed
-	if len(Config.remoteDestinations) == 0 {
+func isIrcAddressAllowed(addr string) bool {
+	// Empty whitelist = all destinations allowed
+	if len(Config.gatewayWhitelist) == 0 {
 		return true
 	}
 
 	foundMatch := false
 
-	for _, originMatch := range Config.remoteDestinations {
-		if originMatch.Match(destinationHeader) {
+	for _, addrMatch := range Config.gatewayWhitelist {
+		if addrMatch.Match(addr) {
 			foundMatch = true
 			break
 		}
