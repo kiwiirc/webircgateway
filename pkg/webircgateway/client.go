@@ -110,6 +110,10 @@ func (c *Client) SendClientSignal(signal string, arg string) {
 	}
 }
 
+func (c *Client) SendIrcError(message string) {
+	c.SendClientSignal("data", "ERROR :"+message)
+}
+
 func (c *Client) connectUpstream() {
 	client := c
 
@@ -133,12 +137,14 @@ func (c *Client) connectUpstream() {
 		upstreamConfig, err = findUpstream()
 		if err != nil {
 			client.Log(3, "No upstreams available")
+			client.SendIrcError("The server has not been configured")
 			client.StartShutdown("err_no_upstream")
 			return
 		}
 	} else {
 		if !isIrcAddressAllowed(client.DestHost) {
 			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
+			client.SendIrcError("Not allowed to connect to " + client.DestHost)
 			client.SendClientSignal("state", "closed")
 			client.StartShutdown("err_no_upstream")
 			return
@@ -441,7 +447,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		addr := message.Params[0]
 		if addr == "" {
-			c.SendClientSignal("data", "ERROR :Missing host")
+			c.SendIrcError("Missing host")
 			c.StartShutdown("missing_host")
 			return "", nil
 		}
