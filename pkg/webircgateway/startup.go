@@ -48,7 +48,7 @@ func maybeStartStaticFileServer() {
 	if Config.Webroot != "" {
 		webroot := ConfigResolvePath(Config.Webroot)
 		logOut(2, "Serving files from %s", webroot)
-		http.Handle("/", http.FileServer(http.Dir(webroot)))
+		HttpRouter.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
 }
 
