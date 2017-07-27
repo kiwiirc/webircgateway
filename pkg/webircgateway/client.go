@@ -324,6 +324,8 @@ func (c *Client) connectUpstream() {
 				break
 			}
 
+			data = strings.Trim(data, "\n\r")
+
 			hook := &HookIrcLine{
 				Client:         client,
 				UpstreamConfig: &upstreamConfig,
