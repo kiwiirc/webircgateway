@@ -488,6 +488,11 @@ func isClientOriginAllowed(originHeader string) bool {
 		return true
 	}
 
+	// No origin header = running on the same page
+	if originHeader == "" {
+		return true
+	}
+
 	foundMatch := false
 
 	for _, originMatch := range Config.RemoteOrigins {
