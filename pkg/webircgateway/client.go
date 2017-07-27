@@ -344,10 +344,15 @@ func (c *Client) connectUpstream() {
 			}
 
 			m, _ := irc.ParseLine(data)
-			if m != nil && m.Command == "NICK" {
+			pLen := 0
+			if m != nil {
+				pLen = len(m.Params)
+			}
+
+			if pLen > 0 && m.Command == "NICK" {
 				client.IrcState.Nick = m.Params[0]
 			}
-			if m != nil && m.Command == "001" {
+			if pLen > 0 && m.Command == "001" {
 				client.IrcState.Nick = m.Params[0]
 				client.State = "connected"
 			}
