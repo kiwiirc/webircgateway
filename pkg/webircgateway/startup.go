@@ -93,7 +93,7 @@ func initHttpRoutes() error {
 		}
 
 		out := ""
-		for item := range clients.Iter() {
+		for item := range Clients.Iter() {
 			c := item.Val.(*Client)
 			out += fmt.Sprintf(
 				"%s %s %s %s!%s\n",

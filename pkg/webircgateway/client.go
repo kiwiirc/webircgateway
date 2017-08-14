@@ -45,7 +45,8 @@ type Client struct {
 	Signals chan ClientSignal
 }
 
-var clients = cmap.New()
+// Clients hold a map lookup for all the connected clients
+var Clients = cmap.New()
 var nextClientID = 1
 
 // NewClient - Makes a new client
@@ -67,10 +68,10 @@ func NewClient() *Client {
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
-	clients.Set(string(c.Id), c)
+	Clients.Set(string(c.Id), c)
 	go func() {
 		c.EndWG.Wait()
-		clients.Remove(string(c.Id))
+		Clients.Remove(string(c.Id))
 	}()
 
 	return c
