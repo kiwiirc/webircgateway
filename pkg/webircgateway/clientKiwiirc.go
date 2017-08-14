@@ -2,8 +2,10 @@ package webircgateway
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
@@ -88,6 +90,13 @@ func kiwiircHTTPHandler(router *http.ServeMux) {
 }
 
 func kiwiircHandler(session sockjs.Session) {
+	// Don't let a single users error kill the entire service for everyone
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[ERROR] Recovered from %s\n%s", r, debug.Stack())
+		}
+	}()
+
 	channels := cmap.New()
 
 	// Read from sockjs
