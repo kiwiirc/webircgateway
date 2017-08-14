@@ -11,7 +11,7 @@ import (
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
-const VERSION = "0.2.6"
+const VERSION = "0.3.0"
 
 func init() {
 	webircgateway.Version = VERSION
