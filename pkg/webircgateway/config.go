@@ -2,8 +2,10 @@ package webircgateway
 
 import (
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gobwas/glob"
@@ -151,12 +153,12 @@ func LoadConfig() error {
 
 		if strings.Index(section.Name(), "server.") == 0 {
 			server := ConfigServer{}
-			server.LocalAddr = section.Key("bind").MustString("127.0.0.1")
-			server.Port = section.Key("port").MustInt(80)
-			server.TLS = section.Key("tls").MustBool(false)
-			server.CertFile = section.Key("cert").MustString("")
-			server.KeyFile = section.Key("key").MustString("")
-			server.LetsEncryptCacheFile = section.Key("letsencrypt_cache").MustString("")
+			server.LocalAddr = confKeyAsString(section.Key("bind"), "127.0.0.1")
+			server.Port = confKeyAsInt(section.Key("port"), 80)
+			server.TLS = confKeyAsBool(section.Key("tls"), false)
+			server.CertFile = confKeyAsString(section.Key("cert"), "")
+			server.KeyFile = confKeyAsString(section.Key("key"), "")
+			server.LetsEncryptCacheFile = confKeyAsString(section.Key("letsencrypt_cache"), "")
 
 			Config.Servers = append(Config.Servers, server)
 		}
@@ -214,4 +216,53 @@ func LoadConfig() error {
 	}
 
 	return nil
+}
+
+func confKeyAsString(key *ini.Key, def string) string {
+	val := def
+
+	str := key.String()
+	println("confKeyAsString()", str, def)
+	if len(str) > 1 && str[:1] == "$" {
+		val = os.Getenv(str[1:])
+	} else {
+		val = key.MustString(def)
+	}
+	println("Returning", val)
+	return val
+}
+
+func confKeyAsInt(key *ini.Key, def int) int {
+	val := def
+
+	str := key.String()
+	if len(str) > 1 && str[:1] == "$" {
+		envVal := os.Getenv(str[1:])
+		envValInt, err := strconv.Atoi(envVal)
+		if err == nil {
+			val = envValInt
+		}
+	} else {
+		val = key.MustInt(def)
+	}
+
+	return val
+}
+
+func confKeyAsBool(key *ini.Key, def bool) bool {
+	val := def
+
+	str := key.String()
+	if len(str) > 1 && str[:1] == "$" {
+		envVal := os.Getenv(str[1:])
+		if envVal == "0" || envVal == "false" || envVal == "no" {
+			val = false
+		} else {
+			val = true
+		}
+	} else {
+		val = key.MustBool(def)
+	}
+
+	return val
 }
