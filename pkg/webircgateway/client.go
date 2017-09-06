@@ -70,6 +70,7 @@ func NewClient() *Client {
 	// when they are all completed)
 	Clients.Set(string(c.Id), c)
 	go func() {
+		time.Sleep(time.Second * 3)
 		c.EndWG.Wait()
 		Clients.Remove(string(c.Id))
 	}()
@@ -338,6 +339,10 @@ func (c *Client) connectUpstream() {
 				continue
 			}
 
+			if data == "" {
+				continue
+			}
+
 			client.Log(1, "upstream->: %s", data)
 
 			data = ensureUtf8(data, client.Encoding)
@@ -469,7 +474,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		} else {
 			c.DestHost = addr[0:portSep]
 			portParam := addr[portSep+1:]
-			if portParam[0:1] == "+" {
+			if len(portParam) > 0 && portParam[0:1] == "+" {
 				c.DestTLS = true
 				c.DestPort, err = strconv.Atoi(portParam[1:])
 				if err != nil {
