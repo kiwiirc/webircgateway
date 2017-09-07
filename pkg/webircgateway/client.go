@@ -239,8 +239,14 @@ func (c *Client) connectUpstream() {
 		))
 
 		if dialErr != nil {
+			errString := ""
+			if errString = typeOfErr(dialErr); errString != "" {
+				errString = "err_" + errString
+			} else {
+				errString = "err_proxy"
+			}
 			client.Log(3, "Error connecting to the kiwi proxy. %s", dialErr.Error())
-			client.SendClientSignal("state", "closed", "err_proxy")
+			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
@@ -399,6 +405,20 @@ func typeOfErr(err error) string {
 	}
 
 	switch t := err.(type) {
+	case *proxy.ConnError:
+		switch t.Type {
+		case "conn_reset":
+			return ""
+		case "conn_refused":
+			return "refused"
+		case "not_found":
+			return "unknown_host"
+		case "conn_timeout":
+			return "timeout"
+		default:
+			return ""
+		}
+
 	case *net.OpError:
 		if t.Op == "dial" {
 			return "unknown_host"
