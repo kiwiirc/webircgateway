@@ -66,7 +66,7 @@ func (c *Channel) listenForSignals() {
 			if signal[1] == "connected" {
 				c.Conn.Send(fmt.Sprintf(":%s control connected", c.Id))
 			} else if signal[1] == "closed" {
-				c.Conn.Send(fmt.Sprintf(":%s control closed", c.Id))
+				c.Conn.Send(fmt.Sprintf(":%s control closed %s", c.Id, signal[2]))
 			}
 		}
 

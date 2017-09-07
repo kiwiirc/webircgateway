@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -22,7 +23,7 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-type ClientSignal [2]string
+type ClientSignal [3]string
 
 // Client - Connecting client struct
 type Client struct {
@@ -106,9 +107,16 @@ func (c *Client) StartShutdown(reason string) {
 	}
 }
 
-func (c *Client) SendClientSignal(signal string, arg string) {
+func (c *Client) SendClientSignal(signal string, args ...string) {
 	if !c.ShuttingDown {
-		c.Signals <- ClientSignal{signal, arg}
+		switch len(args) {
+		case 0:
+			c.Signals <- ClientSignal{signal}
+		case 1:
+			c.Signals <- ClientSignal{signal, args[0]}
+		case 2:
+			c.Signals <- ClientSignal{signal, args[0], args[1]}
+		}
 	}
 }
 
@@ -147,7 +155,7 @@ func (c *Client) connectUpstream() {
 		if !isIrcAddressAllowed(client.DestHost) {
 			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
 			client.SendIrcError("Not allowed to connect to " + client.DestHost)
-			client.SendClientSignal("state", "closed")
+			client.SendClientSignal("state", "closed", "err_forbidden")
 			client.StartShutdown("err_no_upstream")
 			return
 		}
@@ -162,7 +170,7 @@ func (c *Client) connectUpstream() {
 	}
 	hook.Dispatch("irc.connection.pre")
 	if hook.Halt {
-		client.SendClientSignal("state", "closed")
+		client.SendClientSignal("state", "closed", "err_forbidden")
 		client.StartShutdown("err_connecting_upstream")
 		return
 	}
@@ -179,7 +187,10 @@ func (c *Client) connectUpstream() {
 
 		if connErr != nil {
 			client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
-			client.SendClientSignal("state", "closed")
+			if errString := typeOfErr(connErr); errString != "" {
+				errString = "err_" + errString
+			}
+			client.SendClientSignal("state", "closed", typeOfErr(connErr))
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
@@ -202,7 +213,7 @@ func (c *Client) connectUpstream() {
 			err := tlsConn.Handshake()
 			if err != nil {
 				client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
-				client.SendClientSignal("state", "closed")
+				client.SendClientSignal("state", "closed", "err_tls")
 				client.StartShutdown("err_connecting_upstream")
 				return
 			}
@@ -228,7 +239,7 @@ func (c *Client) connectUpstream() {
 
 		if dialErr != nil {
 			client.Log(3, "Error connecting to the kiwi proxy. %s", dialErr.Error())
-			client.SendClientSignal("state", "closed")
+			client.SendClientSignal("state", "closed", "err_proxy")
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
@@ -375,6 +386,32 @@ func (c *Client) connectUpstream() {
 			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort)
 		}
 	}()
+}
+
+func typeOfErr(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	if netError, ok := err.(net.Error); ok && netError.Timeout() {
+		return "timeout"
+	}
+
+	switch t := err.(type) {
+	case *net.OpError:
+		if t.Op == "dial" {
+			return "unknown_host"
+		} else if t.Op == "read" {
+			return "refused"
+		}
+
+	case syscall.Errno:
+		if t == syscall.ECONNREFUSED {
+			return "refused"
+		}
+	}
+
+	return ""
 }
 
 // Handle lines sent from the client
