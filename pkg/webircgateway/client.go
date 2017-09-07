@@ -187,10 +187,11 @@ func (c *Client) connectUpstream() {
 
 		if connErr != nil {
 			client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())
-			if errString := typeOfErr(connErr); errString != "" {
+			errString := ""
+			if errString = typeOfErr(connErr); errString != "" {
 				errString = "err_" + errString
 			}
-			client.SendClientSignal("state", "closed", typeOfErr(connErr))
+			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
 			return
 		}
