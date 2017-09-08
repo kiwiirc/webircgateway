@@ -14,6 +14,15 @@ const KiwiProxyStateConnecting KiwiProxyState = 1
 const KiwiProxyStateHandshaking KiwiProxyState = 2
 const KiwiProxyStateConnected KiwiProxyState = 3
 
+type ConnError struct {
+	Msg  string
+	Type string
+}
+
+func (err *ConnError) Error() string {
+	return err.Msg
+}
+
 type KiwiProxyConnection struct {
 	Username       string
 	ProxyInterface string
@@ -77,7 +86,23 @@ func (c *KiwiProxyConnection) Dial(proxyServerAddr string) error {
 	} else {
 		(*c.Conn).Close()
 		c.State = KiwiProxyStateClosed
-		return errors.New("The proxy could not connect to the destination")
+
+		if bufLen == 0 {
+			return errors.New("The proxy could not connect to the destination")
+		}
+
+		switch response[0] {
+		case '0':
+			return errors.New("The proxy could not connect to the destination")
+		case '2':
+			return &ConnError{Msg: "Connection reset", Type: "conn_reset"}
+		case '3':
+			return &ConnError{Msg: "Connection refused", Type: "conn_refused"}
+		case '4':
+			return &ConnError{Msg: "Host not found", Type: "not_found"}
+		case '5':
+			return &ConnError{Msg: "Connection timed out", Type: "conn_timeout"}
+		}
 	}
 
 	return nil
