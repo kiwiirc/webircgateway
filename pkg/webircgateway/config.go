@@ -222,13 +222,12 @@ func confKeyAsString(key *ini.Key, def string) string {
 	val := def
 
 	str := key.String()
-	println("confKeyAsString()", str, def)
 	if len(str) > 1 && str[:1] == "$" {
 		val = os.Getenv(str[1:])
 	} else {
 		val = key.MustString(def)
 	}
-	println("Returning", val)
+
 	return val
 }
 
