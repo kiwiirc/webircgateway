@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/kiwiirc/webircgateway/pkg/proxy"
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
@@ -20,7 +21,7 @@ func init() {
 func main() {
 	printVersion := flag.Bool("version", false, "Print the version")
 	configFile := flag.String("config", "config.conf", "Config file location")
-	runConfigTest := flag.Bool("test", false, "Just test the config file")
+	startSection := flag.String("run", "gateway", "What type of server to run")
 	flag.Parse()
 
 	if *printVersion {
@@ -28,22 +29,29 @@ func main() {
 		os.Exit(0)
 	}
 
+	switch *startSection {
+	case "proxy":
+		runProxy()
+	case "gateway":
+		runGateway(*configFile)
+	}
+}
+
+func runProxy() {
+	proxy.Start(os.Getenv("listen"))
+}
+
+func runGateway(configFile string) {
 	// Print any webircgateway logout to STDOUT
 	go printLogOutput()
 
-	webircgateway.SetConfigFile(*configFile)
+	webircgateway.SetConfigFile(configFile)
 	log.Printf("Using config %s", webircgateway.CurrentConfigFile())
 
 	err := webircgateway.LoadConfig()
 	if err != nil {
 		log.Printf("Config file error: %s", err.Error())
 		os.Exit(1)
-	}
-
-	if *runConfigTest {
-		// TODO: This
-		log.Println("Config file is OK")
-		os.Exit(0)
 	}
 
 	watchForSignals()

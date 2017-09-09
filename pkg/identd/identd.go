@@ -21,14 +21,14 @@ func NewIdentdServer() Server {
 }
 
 // AddIdent - Add an ident to be looked up
-func (i *Server) AddIdent(localPort, remotePort int, ident string) {
+func (i *Server) AddIdent(localPort, remotePort int, ident string, iface string) {
 	i.EntriesLock.Lock()
 	i.Entries[fmt.Sprintf("%d-%d", localPort, remotePort)] = ident
 	i.EntriesLock.Unlock()
 }
 
 // RemoveIdent - Remove an ident from being looked up
-func (i *Server) RemoveIdent(localPort, remotePort int) {
+func (i *Server) RemoveIdent(localPort, remotePort int, iface string) {
 	i.EntriesLock.Lock()
 	delete(i.Entries, fmt.Sprintf("%d-%d", localPort, remotePort))
 	i.EntriesLock.Unlock()

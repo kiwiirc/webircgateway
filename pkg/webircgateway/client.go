@@ -205,7 +205,7 @@ func (c *Client) connectUpstream() {
 			_, rPortStr, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			client.IrcState.RemotePort, _ = strconv.Atoi(rPortStr)
 
-			identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username)
+			identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username, "")
 		}
 
 		if upstreamConfig.TLS {
@@ -390,7 +390,7 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("upstream_closed")
 		upstream.Close()
 		if client.IrcState.RemotePort > 0 {
-			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort)
+			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
 		}
 	}()
 }
