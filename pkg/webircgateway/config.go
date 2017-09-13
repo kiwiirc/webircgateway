@@ -20,6 +20,7 @@ type ConfigUpstream struct {
 	Timeout        int
 	Throttle       int
 	WebircPassword string
+	GatewayName    string
 	Proxy          *ConfigProxy
 }
 
@@ -47,6 +48,7 @@ var Config struct {
 	ConfigFile            string
 	LogLevel              int
 	Gateway               bool
+	GatewayName           string
 	GatewayWhitelist      []glob.Glob
 	GatewayThrottle       int
 	GatewayTimeout        int
@@ -126,6 +128,12 @@ func LoadConfig() error {
 			}
 
 			Config.Identd = section.Key("identd").MustBool(false)
+
+			Config.GatewayName = section.Key("gateway_name").MustString("")
+			if strings.Contains(Config.GatewayName, " ") {
+				logOut(3, "Config option gateway_name must not contain spaces")
+				Config.GatewayName = ""
+			}
 		}
 
 		if section.Name() == "gateway" {
@@ -171,6 +179,12 @@ func LoadConfig() error {
 			upstream.Timeout = section.Key("timeout").MustInt(10)
 			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
+
+			upstream.GatewayName = section.Key("gateway_name").MustString("")
+			if strings.Contains(upstream.GatewayName, " ") {
+				logOut(3, "Config option gateway_name must not contain spaces")
+				upstream.GatewayName = ""
+			}
 
 			Config.Upstreams = append(Config.Upstreams, upstream)
 		}
