@@ -525,6 +525,10 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 			return "", nil
 		}
 
+		if len(message.Params) == 0 {
+			return "", nil
+		}
+
 		addr := message.Params[0]
 		if addr == "" {
 			c.SendIrcError("Missing host")
