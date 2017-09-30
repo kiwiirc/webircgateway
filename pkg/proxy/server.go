@@ -26,6 +26,7 @@ const (
 )
 
 var identdRpc *identd.RpcClient
+var Server net.Listener
 
 type HandshakeMeta struct {
 	Host      string `json:"host"`
@@ -190,6 +191,8 @@ func Start(laddr string) {
 		log.Fatal(err.Error())
 	}
 
+	// Expose the server
+	Server = srv
 	log.Printf("Kiwi proxy listening on %s", srv.Addr().String())
 
 	identdRpc = identd.MakeRpcClient("kiwiproxy" + laddr)
