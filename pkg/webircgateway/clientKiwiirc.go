@@ -81,7 +81,9 @@ func (c *Channel) listenForSignals() {
 }
 
 func (c *Channel) handleIncomingLine(line string) {
-	c.Client.Recv <- line
+	if !c.Client.ShuttingDown {
+		c.Client.Recv <- line
+	}
 }
 
 func kiwiircHTTPHandler(router *http.ServeMux) {
