@@ -81,7 +81,7 @@ func (c *Channel) listenForSignals() {
 }
 
 func (c *Channel) handleIncomingLine(line string) {
-	if !c.Client.ShuttingDown {
+	if !c.Client.IsShuttingDown() {
 		c.Client.Recv <- line
 	}
 }

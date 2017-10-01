@@ -27,21 +27,22 @@ type ClientSignal [3]string
 
 // Client - Connecting client struct
 type Client struct {
-	Id              int
-	State           string
-	EndWG           sync.WaitGroup
-	ShuttingDown    bool
-	Recv            chan string
-	UpstreamSend    chan string
-	UpstreamStarted bool
-	RemoteAddr      string
-	RemoteHostname  string
-	RemotePort      int
-	DestHost        string
-	DestPort        int
-	DestTLS         bool
-	IrcState        irc.State
-	Encoding        string
+	Id               int
+	State            string
+	EndWG            sync.WaitGroup
+	shuttingDownLock sync.Mutex
+	shuttingDown     bool
+	Recv             chan string
+	UpstreamSend     chan string
+	UpstreamStarted  bool
+	RemoteAddr       string
+	RemoteHostname   string
+	RemotePort       int
+	DestHost         string
+	DestPort         int
+	DestTLS          bool
+	IrcState         irc.State
+	Encoding         string
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals chan ClientSignal
 }
@@ -85,10 +86,19 @@ func (c *Client) Log(level int, format string, args ...interface{}) {
 	logOut(level, prefix+format, args...)
 }
 
+func (c *Client) IsShuttingDown() bool {
+	c.shuttingDownLock.Lock()
+	defer c.shuttingDownLock.Unlock()
+	return c.shuttingDown
+}
+
 func (c *Client) StartShutdown(reason string) {
-	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.ShuttingDown)
-	if !c.ShuttingDown {
-		c.ShuttingDown = true
+	c.shuttingDownLock.Lock()
+	defer c.shuttingDownLock.Unlock()
+
+	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.shuttingDown)
+	if !c.shuttingDown {
+		c.shuttingDown = true
 		c.State = "ending"
 
 		switch reason {
@@ -108,7 +118,10 @@ func (c *Client) StartShutdown(reason string) {
 }
 
 func (c *Client) SendClientSignal(signal string, args ...string) {
-	if !c.ShuttingDown {
+	c.shuttingDownLock.Lock()
+	defer c.shuttingDownLock.Unlock()
+
+	if !c.shuttingDown {
 		switch len(args) {
 		case 0:
 			c.Signals <- ClientSignal{signal}
@@ -653,8 +666,9 @@ func ensureUtf8(s string, fromEncoding string) string {
 		return s
 	}
 
-	encoding, _ := charset.Lookup(fromEncoding)
+	encoding, encErr := charset.Lookup(fromEncoding)
 	if encoding == nil {
+		println("encErr:", encErr)
 		return ""
 	}
 
