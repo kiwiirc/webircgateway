@@ -38,7 +38,15 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		client.RemoteHostname = client.RemoteAddr
 	} else {
 		// FQDNs include a . at the end. Strip it out
-		client.RemoteHostname = strings.Trim(clientHostnames[0], ".")
+		potentialHostname := strings.Trim(clientHostnames[0], ".")
+
+		// Must check that the resolved hostname also resolves back to the users IP
+		addr, err := net.LookupIP(potentialHostname)
+		if err == nil && len(addr) == 1 && addr[0].String() == client.RemoteAddr {
+			client.RemoteHostname = potentialHostname
+		} else {
+			client.RemoteHostname = client.RemoteAddr
+		}
 	}
 
 	client.Log(2, "New kiwi channel from %s %s", client.RemoteAddr, client.RemoteHostname)
