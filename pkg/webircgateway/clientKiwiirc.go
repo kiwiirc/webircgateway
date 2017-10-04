@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/igm/sockjs-go/sockjs"
 	"github.com/orcaman/concurrent-map"
@@ -17,6 +18,8 @@ type Channel struct {
 	Client       *Client
 	Id           string
 	waitForClose chan bool
+	ClosedLock   sync.Mutex
+	Closed       bool
 }
 
 var nextChannelID int
@@ -56,6 +59,7 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		Client:       client,
 		Conn:         ws,
 		waitForClose: make(chan bool),
+		Closed:       false,
 	}
 
 	go channel.listenForSignals()
@@ -84,14 +88,23 @@ func (c *Channel) listenForSignals() {
 		}
 	}
 
+	c.ClosedLock.Lock()
+
+	c.Closed = true
 	close(c.Client.Recv)
 	close(c.waitForClose)
+
+	c.ClosedLock.Unlock()
 }
 
 func (c *Channel) handleIncomingLine(line string) {
-	if !c.Client.IsShuttingDown() {
+	c.ClosedLock.Lock()
+
+	if !c.Closed {
 		c.Client.Recv <- line
 	}
+
+	c.ClosedLock.Unlock()
 }
 
 func kiwiircHTTPHandler(router *http.ServeMux) {
@@ -156,6 +169,7 @@ func kiwiircHandler(session sockjs.Session) {
 
 		for channel := range channels.Iter() {
 			c := channel.Val.(Channel)
+			c.Closed = true
 			c.Client.StartShutdown("client_closed")
 		}
 	}()
