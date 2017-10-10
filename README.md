@@ -30,13 +30,22 @@ The `kiwiirc` transport has been designed to work with kiwiirc to further increa
 ### Building and development
 webircgateway is built using golang - make sure to have this installed and configured first!
 
-Included is a `webircgateway.sh` helper file to wrap building and running the project during development.
-* `./webircgateway.sh prepare` will download any dependencies the project has
-* `./webircgateway.sh build` will build the project to the `./webircgateway` binary
-* `./webircgateway.sh run` will run the project from sources
+For fresh install:
+
+`go get github.com/kiwiirc/webircgateway`
+
+To update an already installed instance:
+
+`go get -u github.com/kiwiirc/webircgateway`
+
+Then you can build it:
+
+`cd ~/go/src/github.com/kiwiirc/webircgateway`
+
+`go build -o webircgateway main.go`
 
 ### Running
-Once compiled and you have a config file set, run `./websocketgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
+Once compiled and you have a config file set, run `./webircgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
 
 ### Configuration location
 By default the configuration file is looked for in the current directly, ./config.conf. Use the --config parameter to specify a different location.
