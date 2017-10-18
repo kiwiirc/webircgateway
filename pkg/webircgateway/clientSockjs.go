@@ -41,6 +41,15 @@ func sockjsHandler(session sockjs.Session) {
 		}
 	}
 
+	if isRequestSecure(session.Request()) {
+		client.Tags["secure"] = ""
+	}
+
+	// This doesn't make sense to have since the remote port may change between requests. Only
+	// here for testing purposes for now.
+	_, remoteAddrPort, _ := net.SplitHostPort(session.Request().RemoteAddr)
+	client.Tags["remote-port"] = remoteAddrPort
+
 	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
 
 	// Read from sockjs
