@@ -18,6 +18,7 @@
     * SockJS (/webirc/sockjs/)
     * Kiwi IRC multi-servers (/webirc/kiwi/)
 * Designed for wide web browser support
+* HTTP Origin header whitelisting
 
 
 ### Overview
@@ -51,6 +52,14 @@ Websockets are required to use UTF-8 encoded messages otherwise the browser will
 If the IRC network uses an encoding other than UTF-8, the browser may send `ENCODING <encoding>` which will instruct webircgateway to automatically encode all messages to `<encoding>` before sending them to the IRC network, and decode messages back to UTF-8 before sending them to the browser.
 
 However, it is highly recommended to use UTF-8 for your network to simplify things!
+
+
+### Security considerations
+Allowing anybody to connect to your IRC network via the web can open you up to abuse. It is extremely easy for somebody to place code on a popular website that floods your network and with fake users to spam or harass users.
+
+Take special note of the `[allowed_origins]` section of the configuration file. If a client from example.com connects to your webircgateway server but example.com is not listed here, the client will be refused and will not be a threat to your network.
+
+If you are running an IRC network irc.network.org and you host your own webchat, you may want to list `*.network.org` here to only allow clients from your website to connect.
 
 
 ### Building and development
