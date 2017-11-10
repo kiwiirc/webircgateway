@@ -258,7 +258,13 @@ func (c *Client) connectUpstream() {
 			} else {
 				errString = "err_proxy"
 			}
-			client.Log(3, "Error connecting to the kiwi proxy. %s", dialErr.Error())
+			client.Log(3,
+				"Error connecting to the kiwi proxy, %s:%d. %s",
+				upstreamConfig.Proxy.Hostname,
+				upstreamConfig.Proxy.Port,
+				dialErr.Error(),
+			)
+
 			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
 			return
