@@ -43,6 +43,7 @@ type Client struct {
 	DestTLS          bool
 	IrcState         irc.State
 	Encoding         string
+	Tags             map[string]string
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals chan ClientSignal
 }
@@ -63,6 +64,7 @@ func NewClient() *Client {
 		UpstreamSend: make(chan string, 50),
 		Encoding:     "UTF-8",
 		Signals:      make(chan ClientSignal, 50),
+		Tags:         make(map[string]string),
 	}
 
 	go c.clientLineWorker()
@@ -285,12 +287,18 @@ func (c *Client) connectUpstream() {
 			gatewayName = upstreamConfig.GatewayName
 		}
 
+		webircTags := buildWebircTags(client)
+		if strings.Contains(webircTags, " ") {
+			webircTags = ":" + webircTags
+		}
+
 		webircLine := fmt.Sprintf(
-			"WEBIRC %s %s %s %s\n",
+			"WEBIRC %s %s %s %s %s\n",
 			upstreamConfig.WebircPassword,
 			gatewayName,
 			client.RemoteHostname,
 			client.RemoteAddr,
+			webircTags,
 		)
 		client.Log(1, "->upstream: %s", webircLine)
 		upstream.Write([]byte(webircLine))
@@ -667,6 +675,23 @@ func findWebircPassword(ircHost string) string {
 	return pass
 }
 
+func buildWebircTags(client *Client) string {
+	str := ""
+	for key, val := range client.Tags {
+		if str != "" {
+			str += " "
+		}
+
+		if val == "" {
+			str += key
+		} else {
+			str += key + "=" + val
+		}
+	}
+
+	return str
+}
+
 func ensureUtf8(s string, fromEncoding string) string {
 	if utf8.ValidString(s) {
 		return s
@@ -728,4 +753,32 @@ func GetRemoteAddressFromRequest(req *http.Request) net.IP {
 
 	return remoteIP
 
+}
+
+func isRequestSecure(req *http.Request) bool {
+	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+	remoteIP := net.ParseIP(remoteAddr)
+
+	isInRange := false
+	for _, cidrRange := range Config.ReverseProxies {
+		if cidrRange.Contains(remoteIP) {
+			isInRange = true
+			break
+		}
+	}
+
+	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
+	// the headers and check the request directly
+	if !isInRange && req.TLS == nil {
+		return false
+	} else if !isInRange {
+		return true
+	}
+
+	headerVal := strings.ToLower(req.Header.Get("x-forwarded-proto"))
+	if headerVal == "https" {
+		return true
+	}
+
+	return false
 }

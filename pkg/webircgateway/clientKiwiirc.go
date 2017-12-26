@@ -52,6 +52,15 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 		}
 	}
 
+	if isRequestSecure(ws.Request()) {
+		client.Tags["secure"] = ""
+	}
+
+	// This doesn't make sense to have since the remote port may change between requests. Only
+	// here for testing purposes for now.
+	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
+	client.Tags["remote-port"] = remoteAddrPort
+
 	client.Log(2, "New kiwi channel from %s %s", client.RemoteAddr, client.RemoteHostname)
 
 	channel := Channel{

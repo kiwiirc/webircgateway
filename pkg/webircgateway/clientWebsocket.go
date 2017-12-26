@@ -41,6 +41,13 @@ func websocketHandler(ws *websocket.Conn) {
 		}
 	}
 
+	if isRequestSecure(ws.Request()) {
+		client.Tags["secure"] = ""
+	}
+
+	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
+	client.Tags["remote-port"] = remoteAddrPort
+
 	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
 
 	// We wait until the client send queue has been drained
