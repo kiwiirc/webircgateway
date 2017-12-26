@@ -65,14 +65,22 @@ If you are running an IRC network irc.network.org and you host your own webchat,
 ### Building and development
 webircgateway is built using golang - make sure to have this installed and configured first!
 
-* `go get http://github.com/kiwiirc/webircgateway`
-* `cd $GOPATH/src/github.com/kiwiirc/webircgateway`
-* `go run main.go`
+To download the source:
 
+`go get github.com/kiwiirc/webircgateway`
+
+To update your existing source:
+
+`go get -u github.com/kiwiirc/webircgateway`
+
+Building from source:
+
+`cd ~/go/src/github.com/kiwiirc/webircgateway`
+
+`go build -o webircgateway main.go`
 
 ### Running
 Once compiled and you have a config file set, run `./webircgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
-
 
 ### Configuration location
 By default the configuration file is looked for in the current directly, ./config.conf. Use the --config parameter to specify a different location.
