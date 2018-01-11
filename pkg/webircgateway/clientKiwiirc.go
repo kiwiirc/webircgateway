@@ -63,7 +63,7 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 
 	client.Log(2, "New kiwi channel from %s %s", client.RemoteAddr, client.RemoteHostname)
 
-	channel := Channel{
+	channel := &Channel{
 		Id:           chanID,
 		Client:       client,
 		Conn:         ws,
@@ -73,7 +73,7 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 
 	go channel.listenForSignals()
 
-	return &channel
+	return channel
 }
 
 func (c *Channel) listenForSignals() {
@@ -147,7 +147,7 @@ func kiwiircHandler(session sockjs.Session) {
 						if channel == nil {
 							continue
 						}
-						channels.Set(chanID, *channel)
+						channels.Set(chanID, channel)
 
 						// When the channel closes, remove it from the map again
 						go func() {
@@ -166,7 +166,7 @@ func kiwiircHandler(session sockjs.Session) {
 
 					channel, channelExists := channels.Get(chanID)
 					if channelExists {
-						c := channel.(Channel)
+						c := channel.(*Channel)
 						c.handleIncomingLine(data)
 					}
 				}
@@ -177,7 +177,7 @@ func kiwiircHandler(session sockjs.Session) {
 		}
 
 		for channel := range channels.Iter() {
-			c := channel.Val.(Channel)
+			c := channel.Val.(*Channel)
 			c.Closed = true
 			c.Client.StartShutdown("client_closed")
 		}
