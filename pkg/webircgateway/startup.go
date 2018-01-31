@@ -143,7 +143,23 @@ func startServer(conf ConfigServer) {
 		tlsKey := ConfigResolvePath(conf.KeyFile)
 
 		logOut(2, "Listening with TLS on %s", addr)
-		err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, HttpRouter)
+		keyPair, keyPairErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
+		if keyPairErr != nil {
+			logOut(3, "Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
+			return
+		}
+		srv := &http.Server{
+			Addr: addr,
+			TLSConfig: &tls.Config{
+				Certificates: []tls.Certificate{keyPair},
+			},
+			Handler: HttpRouter,
+		}
+
+		// Don't use HTTP2 since it doesn't support websockets
+		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+
+		err := srv.ListenAndServeTLS("", "")
 		if err != nil {
 			logOut(3, "Failed to listen with TLS: %s", err.Error())
 		}
@@ -161,6 +177,10 @@ func startServer(conf ConfigServer) {
 			},
 			Handler: HttpRouter,
 		}
+
+		// Don't use HTTP2 since it doesn't support websockets
+		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+
 		err = srv.ListenAndServeTLS("", "")
 		logOut(3, "Listening with letsencrypt failed: %s", err.Error())
 	} else {
