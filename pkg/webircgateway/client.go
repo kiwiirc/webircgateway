@@ -19,6 +19,7 @@ import (
 
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
+	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
 	"github.com/orcaman/concurrent-map"
 	"golang.org/x/net/html/charset"
 )
@@ -57,6 +58,8 @@ type Client struct {
 	IrcState         irc.State
 	Encoding         string
 	Tags             map[string]string
+	// Captchas may be needed to verify a client
+	Verified bool
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals chan ClientSignal
 }
@@ -78,6 +81,11 @@ func NewClient() *Client {
 		Encoding:     "UTF-8",
 		Signals:      make(chan ClientSignal, 50),
 		Tags:         make(map[string]string),
+	}
+
+	// Auto verify the client if it's not needed
+	if !Config.RequiresVerification {
+		c.Verified = true
 	}
 
 	go c.clientLineWorker()
@@ -518,6 +526,33 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		return line, nil
 	}
 
+	maybeConnectUpstream := func() {
+		if !c.UpstreamStarted && c.IrcState.Username != "" && c.Verified {
+			go c.connectUpstream()
+		}
+	}
+
+	if !c.Verified && strings.ToUpper(message.Command) == "CAPTCHA" {
+		verified := false
+		if len(message.Params) >= 1 {
+			captcha := recaptcha.R{
+				Secret: Config.ReCaptchaSecret,
+			}
+
+			verified = captcha.VerifyResponse(message.Params[0])
+		}
+
+		if !verified {
+			c.SendIrcError("Invalid captcha")
+			c.StartShutdown("unverifed")
+		} else {
+			c.Verified = true
+			maybeConnectUpstream()
+		}
+
+		return "", nil
+	}
+
 	// USER <username> <hostname> <servername> <realname>
 	if strings.ToUpper(message.Command) == "USER" && !c.UpstreamStarted {
 		if len(message.Params) < 4 {
@@ -539,7 +574,8 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		c.IrcState.Username = message.Params[0]
 		c.IrcState.RealName = message.Params[3]
-		go c.connectUpstream()
+
+		maybeConnectUpstream()
 	}
 
 	if strings.ToUpper(message.Command) == "ENCODING" {

@@ -62,6 +62,9 @@ var Config struct {
 	ClientRealname        string
 	ClientUsername        string
 	Identd                bool
+	RequiresVerification  bool
+	ReCaptchaSecret       string
+	ReCaptchaKey          string
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -118,6 +121,9 @@ func LoadConfig() error {
 	Config.GatewayWhitelist = []glob.Glob{}
 	Config.ReverseProxies = []net.IPNet{}
 	Config.Webroot = ""
+	Config.ReCaptchaSecret = ""
+	Config.ReCaptchaKey = ""
+	Config.RequiresVerification = false
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
@@ -133,6 +139,15 @@ func LoadConfig() error {
 			if strings.Contains(Config.GatewayName, " ") {
 				logOut(3, "Config option gateway_name must not contain spaces")
 				Config.GatewayName = ""
+			}
+		}
+
+		if section.Name() == "verify" {
+			captchaSecret := section.Key("recaptcha_secret").MustString("")
+			captchaKey := section.Key("recaptcha_key").MustString("")
+			if captchaSecret != "" && captchaKey != "" {
+				Config.RequiresVerification = true
+				Config.ReCaptchaSecret = captchaSecret
 			}
 		}
 
