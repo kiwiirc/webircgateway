@@ -23,6 +23,19 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
+const (
+	// ClientStateIdle - Client connected and just sat there
+	ClientStateIdle = "idle"
+	// ClientStateConnecting - Connecting upstream
+	ClientStateConnecting = "connecting"
+	// ClientStateRegistered - Registering to the IRC network
+	ClientStateRegistering = "registering"
+	// ClientStateConnected - Connected upstream
+	ClientStateConnected = "connected"
+	// ClientStateEnding - Client is ending its connection
+	ClientStateEnding = "ending"
+)
+
 type ClientSignal [3]string
 
 // Client - Connecting client struct
@@ -101,7 +114,7 @@ func (c *Client) StartShutdown(reason string) {
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.shuttingDown)
 	if !c.shuttingDown {
 		c.shuttingDown = true
-		c.State = "ending"
+		c.State = ClientStateEnding
 
 		switch reason {
 		case "upstream_closed":
@@ -190,7 +203,7 @@ func (c *Client) connectUpstream() {
 		return
 	}
 
-	client.State = "connecting"
+	client.State = ClientStateConnecting
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -275,7 +288,7 @@ func (c *Client) connectUpstream() {
 		upstream = ConnInterface(conn)
 	}
 
-	client.State = "registering"
+	client.State = ClientStateRegistering
 
 	// Send any WEBIRC lines
 	if upstreamConfig.WebircPassword != "" {
@@ -416,7 +429,7 @@ func (c *Client) connectUpstream() {
 			}
 			if pLen > 0 && m.Command == "001" {
 				client.IrcState.Nick = m.Params[0]
-				client.State = "connected"
+				client.State = ClientStateConnected
 			}
 
 			client.SendClientSignal("data", data)
