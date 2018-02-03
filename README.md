@@ -19,6 +19,7 @@
     * Kiwi IRC multi-servers (/webirc/kiwi/)
 * Designed for wide web browser support
 * HTTP Origin header whitelisting
+* reCaptcha support
 
 
 ### Overview
@@ -44,6 +45,9 @@ Two IRC commands are available to connecting clients. These commands will be pro
 
 
 `HOST irc.network.org:6667` signals webircgateway to connect to `irc.network.org` on port `6667` (`+` before the port signifies TLS). This will only succeed if `gateway = true` in the webircgateway config, otherwise it will be ignored and a connection will be made to the configured IRC server instead.
+
+
+`CAPTCHA captcha-response-code` will attempt to verify the client with recaptcha. If 'captcha-response-code' passes recaptcha verification then the clients IRC connection will be started. Otherwise, no IRC connection will be possible.
 
 
 ### Encoding / multilingual support
