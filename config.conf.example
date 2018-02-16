@@ -18,6 +18,9 @@ recaptcha_key = ""
 #username = "%i"
 #realname = "I am a webchat user"
 
+# This hostname value will only be used when using a WEBIRC password
+#hostname = "%h"
+
 # The websocket / http server
 [server.1]
 bind = "0.0.0.0"

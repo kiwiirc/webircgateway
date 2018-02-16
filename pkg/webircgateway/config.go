@@ -61,6 +61,7 @@ var Config struct {
 	Webroot               string
 	ClientRealname        string
 	ClientUsername        string
+	ClientHostname        string
 	Identd                bool
 	RequiresVerification  bool
 	ReCaptchaSecret       string
@@ -124,6 +125,9 @@ func LoadConfig() error {
 	Config.ReCaptchaSecret = ""
 	Config.ReCaptchaKey = ""
 	Config.RequiresVerification = false
+	Config.ClientRealname = ""
+	Config.ClientUsername = ""
+	Config.ClientHostname = ""
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
@@ -166,6 +170,7 @@ func LoadConfig() error {
 		if strings.Index(section.Name(), "clients") == 0 {
 			Config.ClientUsername = section.Key("username").MustString("")
 			Config.ClientRealname = section.Key("realname").MustString("")
+			Config.ClientHostname = section.Key("hostname").MustString("")
 		}
 
 		if strings.Index(section.Name(), "fileserving") == 0 {

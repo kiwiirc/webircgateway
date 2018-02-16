@@ -75,7 +75,7 @@ func NewClient() *Client {
 
 	c := &Client{
 		Id:           thisID,
-		State:        "idle",
+		State:        ClientStateIdle,
 		Recv:         make(chan string, 50),
 		UpstreamSend: make(chan string, 50),
 		Encoding:     "UTF-8",
@@ -313,11 +313,16 @@ func (c *Client) connectUpstream() {
 			webircTags = ":" + webircTags
 		}
 
+		clientHostname := client.RemoteHostname
+		if Config.ClientHostname != "" {
+			clientHostname = makeClientReplacements(Config.ClientHostname, client)
+		}
+
 		webircLine := fmt.Sprintf(
 			"WEBIRC %s %s %s %s %s\n",
 			upstreamConfig.WebircPassword,
 			gatewayName,
-			client.RemoteHostname,
+			clientHostname,
 			client.RemoteAddr,
 			webircTags,
 		)
@@ -560,14 +565,10 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		}
 
 		if Config.ClientUsername != "" {
-			message.Params[0] = Config.ClientUsername
-			message.Params[0] = strings.Replace(message.Params[0], "%i", Ipv4ToHex(c.RemoteAddr), -1)
-			message.Params[0] = strings.Replace(message.Params[0], "%h", c.RemoteHostname, -1)
+			message.Params[0] = makeClientReplacements(Config.ClientUsername, c)
 		}
 		if Config.ClientRealname != "" {
-			message.Params[3] = Config.ClientRealname
-			message.Params[3] = strings.Replace(message.Params[3], "%i", Ipv4ToHex(c.RemoteAddr), -1)
-			message.Params[3] = strings.Replace(message.Params[3], "%h", c.RemoteHostname, -1)
+			message.Params[3] = makeClientReplacements(Config.ClientRealname, c)
 		}
 
 		line = message.ToLine()
@@ -640,6 +641,14 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 	}
 
 	return line, nil
+}
+
+// Username / realname / webirc hostname can all have configurable replacements
+func makeClientReplacements(format string, client *Client) string {
+	ret := format
+	ret = strings.Replace(ret, "%i", Ipv4ToHex(client.RemoteAddr), -1)
+	ret = strings.Replace(ret, "%h", client.RemoteHostname, -1)
+	return ret
 }
 
 func isClientOriginAllowed(originHeader string) bool {
