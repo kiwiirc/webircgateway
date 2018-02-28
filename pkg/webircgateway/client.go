@@ -218,8 +218,14 @@ func (c *Client) connectUpstream() {
 		dialer := net.Dialer{}
 		dialer.Timeout = time.Second * time.Duration(upstreamConfig.Timeout)
 
-		upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
-		conn, connErr := dialer.Dial("tcp", upstreamStr)
+		var conn net.Conn
+		var connErr error
+		if upstreamConfig.Network == "unix" {
+			conn, connErr = dialer.Dial("unix", upstreamConfig.Hostname)
+		} else {
+			upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
+			conn, connErr = dialer.Dial("tcp", upstreamStr)
+		}
 
 		if connErr != nil {
 			client.Log(3, "Error connecting to the upstream IRCd. %s", connErr.Error())

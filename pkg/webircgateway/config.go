@@ -14,6 +14,7 @@ import (
 
 // ConfigUpstream - An upstream config
 type ConfigUpstream struct {
+	Network        string
 	Hostname       string
 	Port           int
 	TLS            bool
@@ -193,9 +194,18 @@ func LoadConfig() error {
 
 		if strings.Index(section.Name(), "upstream.") == 0 {
 			upstream := ConfigUpstream{}
-			upstream.Hostname = section.Key("hostname").MustString("127.0.0.1")
-			upstream.Port = section.Key("port").MustInt(6667)
-			upstream.TLS = section.Key("tls").MustBool(false)
+
+			hostname := section.Key("hostname").MustString("127.0.0.1")
+			if strings.HasPrefix(strings.ToLower(hostname), "unix:") {
+				upstream.Network = "unix"
+				upstream.Hostname = hostname[5:]
+			} else {
+				upstream.Network = "tcp"
+				upstream.Hostname = hostname
+				upstream.Port = section.Key("port").MustInt(6667)
+				upstream.TLS = section.Key("tls").MustBool(false)
+			}
+
 			upstream.Timeout = section.Key("timeout").MustInt(10)
 			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
