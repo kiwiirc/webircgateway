@@ -4,7 +4,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
+	"strings"
 
 	"errors"
 
@@ -183,6 +186,16 @@ func startServer(conf ConfigServer) {
 
 		err = srv.ListenAndServeTLS("", "")
 		logOut(3, "Listening with letsencrypt failed: %s", err.Error())
+	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
+		socketFile := conf.LocalAddr[5:]
+		logOut(2, "Listening on %s", socketFile)
+		os.Remove(socketFile)
+		server, serverErr := net.Listen("unix", socketFile)
+		if serverErr != nil {
+			logOut(3, serverErr.Error())
+			return
+		}
+		http.Serve(server, HttpRouter)
 	} else {
 		logOut(2, "Listening on %s", addr)
 		err := http.ListenAndServe(addr, HttpRouter)

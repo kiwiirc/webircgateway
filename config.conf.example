@@ -37,6 +37,10 @@ port = 80
 # free certificate using letsencrypt.com (overrides the above cert/key options)
 #letsencrypt_cache = letsencrypt.cache
 
+# Example unix socket server
+#[server.3]
+#bind = unix:/tmp/webircgateway.sock
+
 # Serve static files from a web root folder.
 # Optional, but handy for serving the Kiwi IRC client if no other webserver is available
 [fileserving]
