@@ -796,6 +796,12 @@ func utf8ToOther(s string, toEncoding string) string {
 
 func GetRemoteAddressFromRequest(req *http.Request) net.IP {
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+
+	// Some web listeners such as unix sockets don't get a RemoteAddr, so default to localhost
+	if remoteAddr == "" {
+		remoteAddr = "127.0.0.1"
+	}
+
 	remoteIP := net.ParseIP(remoteAddr)
 
 	isInRange := false
