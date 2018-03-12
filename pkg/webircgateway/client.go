@@ -324,12 +324,19 @@ func (c *Client) connectUpstream() {
 			clientHostname = makeClientReplacements(Config.ClientHostname, client)
 		}
 
+		remoteAddr := client.RemoteAddr
+		// Wrap IPv6 addresses so they can be sent as an individual IRC parameter
+		// eg. ::1 would not parse correctly as a parameter, while [::1] will
+		if strings.Contains(remoteAddr, ":") {
+			remoteAddr = "[" + remoteAddr + "]"
+		}
+
 		webircLine := fmt.Sprintf(
 			"WEBIRC %s %s %s %s %s\n",
 			upstreamConfig.WebircPassword,
 			gatewayName,
 			clientHostname,
-			client.RemoteAddr,
+			remoteAddr,
 			webircTags,
 		)
 		client.Log(1, "->upstream: %s", webircLine)
