@@ -28,7 +28,7 @@ type ConfigUpstream struct {
 // ConfigServer - A web server config
 type ConfigServer struct {
 	LocalAddr            string
-	Permissions          os.FileMode
+	BindMode             os.FileMode
 	Port                 int
 	TLS                  bool
 	CertFile             string
@@ -184,12 +184,12 @@ func LoadConfig() error {
 		if strings.Index(section.Name(), "server.") == 0 {
 			server := ConfigServer{}
 			server.LocalAddr = confKeyAsString(section.Key("bind"), "127.0.0.1")
-			permissions := confKeyAsString(section.Key("permissions"), "")
-			mode, err := strconv.ParseInt(permissions, 8, 32)
+			rawMode := confKeyAsString(section.Key("bind_mode"), "")
+			mode, err := strconv.ParseInt(rawMode, 8, 32)
 			if err != nil {
 				mode = 0755
 			}
-			server.Permissions = os.FileMode(mode)
+			server.BindMode = os.FileMode(mode)
 			server.Port = confKeyAsInt(section.Key("port"), 80)
 			server.TLS = confKeyAsBool(section.Key("tls"), false)
 			server.CertFile = confKeyAsString(section.Key("cert"), "")
