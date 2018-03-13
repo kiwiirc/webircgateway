@@ -195,6 +195,7 @@ func startServer(conf ConfigServer) {
 			logOut(3, serverErr.Error())
 			return
 		}
+		os.Chmod(socketFile, conf.Permissions)
 		http.Serve(server, HttpRouter)
 	} else {
 		logOut(2, "Listening on %s", addr)
