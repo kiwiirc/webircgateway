@@ -17,15 +17,17 @@ import (
 
 var (
 	// Version - The current version of webircgateway
-	Version    = "-"
-	identdServ identd.Server
-	HttpRouter *http.ServeMux
-	LogOutput  chan string
+	Version     = "-"
+	identdServ  identd.Server
+	HttpRouter  *http.ServeMux
+	LogOutput   chan string
+	messageTags *MessageTagManager
 )
 
 func init() {
 	HttpRouter = http.NewServeMux()
 	LogOutput = make(chan string, 5)
+	messageTags = NewMessageTagManager()
 }
 
 func Prepare() {
