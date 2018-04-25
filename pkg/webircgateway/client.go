@@ -56,7 +56,7 @@ type Client struct {
 	DestHost         string
 	DestPort         int
 	DestTLS          bool
-	IrcState         irc.State
+	IrcState         *irc.State
 	Encoding         string
 	// Tags get passed upstream via the WEBIRC command
 	Tags map[string]string
@@ -87,6 +87,7 @@ func NewClient() *Client {
 		Encoding:     "UTF-8",
 		Signals:      make(chan ClientSignal, 50),
 		Tags:         make(map[string]string),
+		IrcState:     irc.NewState(),
 	}
 
 	// Auto verify the client if it's not needed
@@ -464,12 +465,17 @@ func (c *Client) connectUpstream() {
 				client.IrcState.Nick = m.Params[0]
 				client.State = ClientStateConnected
 			}
+			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
+				c.IrcState.Channels.Set(m.Params[0])
+			}
+			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
+				c.IrcState.Channels.Del(m.Params[0])
+			}
 
 			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
 			// this client
 			if pLen >= 3 &&
 				strings.ToUpper(m.Command) == "CAP" &&
-				strings.ToUpper(m.Params[0]) == "*" &&
 				strings.ToUpper(m.Params[1]) == "LS" {
 				// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
 				caps := ""
@@ -712,6 +718,37 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		}
 
 		line = message.ToLine()
+	}
+
+	if c.Features.Messagetags && message.Command == "TAGMSG" {
+		if len(message.Params) == 0 {
+			return "", nil
+		}
+
+		// We can't be 100% sure what this users correct mask is, so just send the nick
+		message.Prefix.Nick = c.IrcState.Nick
+		message.Prefix.Hostname = ""
+		message.Prefix.Username = ""
+
+		thisHost := strings.ToLower(c.UpstreamConfig.Hostname)
+		target := message.Params[0]
+		for val := range Clients.Iter() {
+			curClient := val.Val.(*Client)
+			sameHost := strings.ToLower(curClient.UpstreamConfig.Hostname) == thisHost
+			if !sameHost {
+				continue
+			}
+
+			// Only send the message on to either the target nick, or the clients in a set channel
+			curNick := strings.ToLower(curClient.IrcState.Nick)
+			if target != curNick && !curClient.IrcState.Channels.Has(target) {
+				continue
+			}
+
+			curClient.SendClientSignal("data", message.ToLine())
+		}
+
+		return "", nil
 	}
 
 	return line, nil

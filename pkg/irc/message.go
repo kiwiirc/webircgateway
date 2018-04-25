@@ -141,6 +141,8 @@ func ParseLine(input string) (*Message, error) {
 	if token != "" && token[0] == 58 {
 		message.Prefix = createMask(token[1:])
 		token, rest = nextToken(rest, false)
+	} else {
+		message.Prefix = createMask("")
 	}
 
 	// Command
