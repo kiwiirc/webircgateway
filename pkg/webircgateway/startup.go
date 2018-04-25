@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -138,7 +139,9 @@ func logOut(level int, format string, args ...interface{}) {
 func startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
-	if conf.TLS && conf.LetsEncryptCacheFile == "" {
+	if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "tcp:") {
+		tcpStartHandler(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
+	} else if conf.TLS && conf.LetsEncryptCacheFile == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
 			logOut(3, "'cert' and 'key' options must be set for TLS servers")
 			return
