@@ -59,14 +59,14 @@ type Client struct {
 	IrcState         irc.State
 	Encoding         string
 	// Tags get passed upstream via the WEBIRC command
-	Tags             map[string]string
+	Tags map[string]string
 	// Captchas may be needed to verify a client
 	Verified bool
 	// Signals for the transport to make use of (data, connection state, etc)
-	Signals chan ClientSignal
+	Signals  chan ClientSignal
 	Features struct {
 		Messagetags bool
-		Metadata bool
+		Metadata    bool
 	}
 }
 
@@ -468,10 +468,10 @@ func (c *Client) connectUpstream() {
 			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
 			// this client
 			if pLen >= 3 &&
-			   strings.ToUpper(m.Command) == "CAP" &&
-			   strings.ToUpper(m.Params[0]) == "*" &&
-			   strings.ToUpper(m.Params[1]) == "LS" {
-			   	// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
+				strings.ToUpper(m.Command) == "CAP" &&
+				strings.ToUpper(m.Params[0]) == "*" &&
+				strings.ToUpper(m.Params[1]) == "LS" {
+				// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
 				caps := ""
 				if pLen >= 4 && m.Params[2] == "*" {
 					caps = strings.ToUpper(m.Params[3])

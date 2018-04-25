@@ -1,17 +1,18 @@
 package webircgateway
 
 import (
-	"github.com/kiwiirc/webircgateway/pkg/irc"
-	"sync"
-	"github.com/OneOfOne/xxhash"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/OneOfOne/xxhash"
+	"github.com/kiwiirc/webircgateway/pkg/irc"
 )
 
 type MessageTagManager struct {
-	Mutex        sync.Mutex
-	knownTags    map[uint64]MessageTags
-	gcTimes      map[uint64]time.Time
+	Mutex     sync.Mutex
+	knownTags map[uint64]MessageTags
+	gcTimes   map[uint64]time.Time
 }
 type MessageTags struct {
 	Tags map[string]string
@@ -20,7 +21,7 @@ type MessageTags struct {
 func NewMessageTagManager() *MessageTagManager {
 	tm := &MessageTagManager{
 		knownTags: make(map[uint64]MessageTags),
-		gcTimes: make(map[uint64]time.Time),
+		gcTimes:   make(map[uint64]time.Time),
 	}
 
 	go tm.RunGarbageCollectionLoop()
