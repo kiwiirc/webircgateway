@@ -29,7 +29,7 @@ func (m *Message) ToLine() string {
 		for tagName, tagVal := range m.Tags {
 			line += tagName
 			if tagVal != "" {
-				line += ":" + tagVal
+				line += "=" + tagVal
 			}
 			line += ";"
 		}
