@@ -29,7 +29,7 @@ func (m *Message) ToLine() string {
 		for tagName, tagVal := range m.Tags {
 			line += tagName
 			if tagVal != "" {
-				line += ":" + tagVal
+				line += "=" + tagVal
 			}
 			line += ";"
 		}
@@ -141,6 +141,8 @@ func ParseLine(input string) (*Message, error) {
 	if token != "" && token[0] == 58 {
 		message.Prefix = createMask(token[1:])
 		token, rest = nextToken(rest, false)
+	} else {
+		message.Prefix = createMask("")
 	}
 
 	// Command

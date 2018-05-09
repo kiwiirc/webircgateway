@@ -49,19 +49,25 @@ type Client struct {
 	Recv             chan string
 	UpstreamSend     chan string
 	UpstreamStarted  bool
+	UpstreamConfig   *ConfigUpstream
 	RemoteAddr       string
 	RemoteHostname   string
 	RemotePort       int
 	DestHost         string
 	DestPort         int
 	DestTLS          bool
-	IrcState         irc.State
+	IrcState         *irc.State
 	Encoding         string
-	Tags             map[string]string
+	// Tags get passed upstream via the WEBIRC command
+	Tags map[string]string
 	// Captchas may be needed to verify a client
 	Verified bool
 	// Signals for the transport to make use of (data, connection state, etc)
-	Signals chan ClientSignal
+	Signals  chan ClientSignal
+	Features struct {
+		Messagetags bool
+		Metadata    bool
+	}
 }
 
 // Clients hold a map lookup for all the connected clients
@@ -81,6 +87,7 @@ func NewClient() *Client {
 		Encoding:     "UTF-8",
 		Signals:      make(chan ClientSignal, 50),
 		Tags:         make(map[string]string),
+		IrcState:     irc.NewState(),
 	}
 
 	// Auto verify the client if it's not needed
@@ -176,6 +183,7 @@ func (c *Client) connectUpstream() {
 	var upstream ConnInterface
 
 	var upstreamConfig ConfigUpstream
+	c.UpstreamConfig = &upstreamConfig
 
 	if client.DestHost == "" {
 		client.Log(2, "Using pre-set upstream")
@@ -457,6 +465,44 @@ func (c *Client) connectUpstream() {
 				client.IrcState.Nick = m.Params[0]
 				client.State = ClientStateConnected
 			}
+			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
+				c.IrcState.Channels.Set(m.Params[0])
+			}
+			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
+				c.IrcState.Channels.Del(m.Params[0])
+			}
+
+			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
+			// this client
+			if pLen >= 3 &&
+				strings.ToUpper(m.Command) == "CAP" &&
+				strings.ToUpper(m.Params[1]) == "LS" {
+				// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
+				caps := ""
+				if pLen >= 4 && m.Params[2] == "*" {
+					caps = strings.ToUpper(m.Params[3])
+				} else {
+					caps = strings.ToUpper(m.Params[2])
+				}
+
+				if strings.Contains(caps, "DRAFT/MESSAGE-TAGS-0.2") {
+					c.Log(1, "Upstream already supports Messagetags, disabling feature")
+					c.Features.Messagetags = false
+				}
+			}
+
+			if m != nil && client.Features.Messagetags && messageTags.CanMessageContainClientTags(m) {
+				// If we have any message tags stored for this message from a previous PRIVMSG sent
+				// by a client, add them back in
+				mTags, mTagsExists := messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
+				if mTagsExists {
+					for k, v := range mTags.Tags {
+						m.Tags[k] = v
+					}
+
+					data = m.ToLine()
+				}
+			}
 
 			client.SendClientSignal("data", data)
 		}
@@ -650,6 +696,58 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		}
 
 		// Don't send the HOST command upstream
+		return "", nil
+	}
+
+	// If the client supports CAP, assume the client also supports parsing MessageTags
+	// When upstream replies with its CAP listing, we check if message-tags is supported by the IRCd already and if so,
+	// we disable this feature flag again to use the IRCds native support.
+	if strings.ToUpper(message.Command) == "CAP" && len(message.Params) >= 0 && strings.ToUpper(message.Params[0]) == "LS" {
+		c.Log(1, "Enabling client Messagetags feature")
+		c.Features.Messagetags = true
+	}
+
+	// Check for any client message tags so that we can store them for replaying to other clients
+	if c.Features.Messagetags && messageTags.CanMessageContainClientTags(message) {
+		messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
+		// Prevent any client tags heading upstream
+		for k := range message.Tags {
+			if k[0] == '+' {
+				delete(message.Tags, k)
+			}
+		}
+
+		line = message.ToLine()
+	}
+
+	if c.Features.Messagetags && message.Command == "TAGMSG" {
+		if len(message.Params) == 0 {
+			return "", nil
+		}
+
+		// We can't be 100% sure what this users correct mask is, so just send the nick
+		message.Prefix.Nick = c.IrcState.Nick
+		message.Prefix.Hostname = ""
+		message.Prefix.Username = ""
+
+		thisHost := strings.ToLower(c.UpstreamConfig.Hostname)
+		target := message.Params[0]
+		for val := range Clients.Iter() {
+			curClient := val.Val.(*Client)
+			sameHost := strings.ToLower(curClient.UpstreamConfig.Hostname) == thisHost
+			if !sameHost {
+				continue
+			}
+
+			// Only send the message on to either the target nick, or the clients in a set channel
+			curNick := strings.ToLower(curClient.IrcState.Nick)
+			if target != curNick && !curClient.IrcState.Channels.Has(target) {
+				continue
+			}
+
+			curClient.SendClientSignal("data", message.ToLine())
+		}
+
 		return "", nil
 	}
 

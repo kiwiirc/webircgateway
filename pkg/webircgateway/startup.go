@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -17,15 +18,17 @@ import (
 
 var (
 	// Version - The current version of webircgateway
-	Version    = "-"
-	identdServ identd.Server
-	HttpRouter *http.ServeMux
-	LogOutput  chan string
+	Version     = "-"
+	identdServ  identd.Server
+	HttpRouter  *http.ServeMux
+	LogOutput   chan string
+	messageTags *MessageTagManager
 )
 
 func init() {
 	HttpRouter = http.NewServeMux()
 	LogOutput = make(chan string, 5)
+	messageTags = NewMessageTagManager()
 }
 
 func Prepare() {
@@ -136,7 +139,9 @@ func logOut(level int, format string, args ...interface{}) {
 func startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
-	if conf.TLS && conf.LetsEncryptCacheFile == "" {
+	if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "tcp:") {
+		tcpStartHandler(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
+	} else if conf.TLS && conf.LetsEncryptCacheFile == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
 			logOut(3, "'cert' and 'key' options must be set for TLS servers")
 			return
