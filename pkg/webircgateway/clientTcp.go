@@ -25,14 +25,14 @@ func tcpStartHandler(lAddr string) {
 			os.Exit(1)
 		}
 		// Handle connections in a new goroutine.
-		go tcpHandler(conn)
+		go tcpHandleConn(conn)
 	}
 }
 
-func tcpHandler(ws net.Conn) {
+func tcpHandleConn(conn net.Conn) {
 	client := NewClient()
 
-	client.RemoteAddr = ws.RemoteAddr().String()
+	client.RemoteAddr = conn.RemoteAddr().String()
 
 	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
 	if err != nil {
@@ -50,7 +50,7 @@ func tcpHandler(ws net.Conn) {
 		}
 	}
 
-	_, remoteAddrPort, _ := net.SplitHostPort(ws.RemoteAddr().String())
+	_, remoteAddrPort, _ := net.SplitHostPort(conn.RemoteAddr().String())
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
@@ -63,7 +63,7 @@ func tcpHandler(ws net.Conn) {
 	go func() {
 		for {
 			r := make([]byte, 1024)
-			len, err := ws.Read(r)
+			len, err := conn.Read(r)
 			if err == nil && len > 0 {
 				message := string(r[:len])
 				message = strings.TrimRight(message, "\r\n")
@@ -100,10 +100,10 @@ func tcpHandler(ws net.Conn) {
 			//line := strings.Trim(signal[1], "\r\n")
 			line := signal[1] + "\n"
 			client.Log(1, "->tcp: %s", line)
-			ws.Write([]byte(line))
+			conn.Write([]byte(line))
 		}
 	}
 
 	sendDrained.Wait()
-	ws.Close()
+	conn.Close()
 }
