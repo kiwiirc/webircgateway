@@ -6,9 +6,10 @@
 ### Features
 **IRC**
 * WEBIRC support
-* Hexed IP / static value overrides for IRC username and realname fields
+* Hexed IP / static value overrides for IRC username, realname and hostname fields
 * Automatic encoding/decoding to UTF-8 from the IRCd
 * Single or multiple IRC server upstreams
+* Client message-tags for IRC servers that do not have message-tags support
 
 **WEB**
 * Automatic Let's Encrypt TLS certificates
