@@ -19,6 +19,15 @@ type Message struct {
 	Params  []string
 }
 
+// GetParam - Get a param value, returning a default value if it doesn't exist
+func (m *Message) GetParam(idx int, def string) string {
+	if idx < 0 || idx > len(m.Params)-1 {
+		return def
+	}
+
+	return m.Params[idx]
+}
+
 // ToLine - Convert the Message struct to its raw IRC line
 func (m *Message) ToLine() string {
 	line := ""

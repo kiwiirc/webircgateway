@@ -92,7 +92,7 @@ func (tags *MessageTagManager) messageHash(client *Client, fromNick string, msg 
 	h := xxhash.New64()
 	h.WriteString(strings.ToLower(client.UpstreamConfig.Hostname))
 	h.WriteString(strings.ToLower(fromNick))
-	h.WriteString(msg.Params[0])
-	h.WriteString(msg.Params[1])
+	h.WriteString(msg.GetParam(0, ""))
+	h.WriteString(msg.GetParam(1, ""))
 	return h.Sum64()
 }
