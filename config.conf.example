@@ -6,6 +6,9 @@ identd = false
 
 gateway_name = ""
 
+# A secret string used for generating client JWT tokens. Do not share this!
+secret = ""
+
 [verify]
 recaptcha_secret = ""
 recaptcha_key = ""

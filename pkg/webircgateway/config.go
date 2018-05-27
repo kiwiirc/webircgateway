@@ -68,6 +68,7 @@ var Config struct {
 	RequiresVerification  bool
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
+	Secret                string
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -127,6 +128,7 @@ func LoadConfig() error {
 	Config.ReCaptchaSecret = ""
 	Config.ReCaptchaKey = ""
 	Config.RequiresVerification = false
+	Config.Secret = ""
 	Config.ClientRealname = ""
 	Config.ClientUsername = ""
 	Config.ClientHostname = ""
@@ -146,6 +148,8 @@ func LoadConfig() error {
 				logOut(3, "Config option gateway_name must not contain spaces")
 				Config.GatewayName = ""
 			}
+
+			Config.Secret = section.Key("secret").MustString("")
 		}
 
 		if section.Name() == "verify" {

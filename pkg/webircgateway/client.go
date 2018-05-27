@@ -17,6 +17,7 @@ import (
 
 	"sync"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
 	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
@@ -466,10 +467,16 @@ func (c *Client) connectUpstream() {
 				client.State = ClientStateConnected
 			}
 			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.Channels.Set(m.Params[0])
+				channel := &irc.StateChannel{}
+				channel.Name = m.GetParam(0, "")
+				channel.Joined = time.Now()
+				c.IrcState.SetChannel(channel)
 			}
 			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.Channels.Del(m.Params[0])
+				c.IrcState.RemoveChannel(m.GetParam(0, ""))
+			}
+			if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
+				c.IrcState.ClearChannels()
 			}
 
 			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
@@ -741,12 +748,55 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 			// Only send the message on to either the target nick, or the clients in a set channel
 			curNick := strings.ToLower(curClient.IrcState.Nick)
-			if target != curNick && !curClient.IrcState.Channels.Has(target) {
+			if target != curNick && !curClient.IrcState.HasChannel(target) {
 				continue
 			}
 
 			curClient.SendClientSignal("data", message.ToLine())
 		}
+
+		return "", nil
+	}
+
+	if strings.ToUpper(message.Command) == "BUFFERTOKEN" {
+		tokenFor := message.GetParam(0, "")
+
+		tokenM := irc.Message{}
+		tokenM.Command = "BUFFERTOKEN"
+		tokenData := jwt.MapClaims{
+			"tkn_created": time.Now().UTC().Unix(),
+			"server":      c.UpstreamConfig.Hostname,
+			"nick":        c.IrcState.Nick,
+			"time_joined": 0,
+			"joined":      false,
+			"channel":     "",
+		}
+
+		if tokenFor == "" {
+			tokenM.Params = append(tokenM.Params, "*")
+		} else {
+			tokenM.Params = append(tokenM.Params, tokenFor)
+
+			tokenForChan := c.IrcState.GetChannel(tokenFor)
+			if tokenForChan != nil {
+				tokenData["time_joined"] = tokenForChan.Joined.Unix()
+				tokenData["channel"] = tokenForChan.Name
+				tokenData["joined"] = true
+			} else {
+				tokenData["channel"] = tokenFor
+			}
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
+		tokenSigned, tokenSignedErr := token.SignedString([]byte(Config.Secret))
+		if tokenSignedErr != nil {
+			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
+			println(tokenSignedErr.Error())
+		}
+
+		tokenM.Params = append(tokenM.Params, tokenSigned)
+
+		c.SendClientSignal("data", tokenM.ToLine())
 
 		return "", nil
 	}
