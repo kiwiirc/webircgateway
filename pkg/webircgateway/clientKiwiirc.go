@@ -37,7 +37,7 @@ func makeChannel(chanID string, ws sockjs.Session) *Channel {
 	client.RemoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
 
 	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
-	if err != nil {
+	if err != nil || len(clientHostnames) == 0 {
 		client.RemoteHostname = client.RemoteAddr
 	} else {
 		// FQDNs include a . at the end. Strip it out
