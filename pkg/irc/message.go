@@ -44,7 +44,7 @@ func (m *Message) ToLine() string {
 		}
 	}
 
-	if m.Prefix != nil {
+	if *m.Prefix != (Mask{}) {
 		prefix := ""
 
 		if m.Prefix.Nick != "" {
