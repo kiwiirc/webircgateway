@@ -53,10 +53,10 @@
   name = "gopkg.in/ini.v1"
   version = "1.37.0"
 
-[[constraint]]
-  name = "rsc.io/letsencrypt"
-  version = "0.0.1"
-
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"
