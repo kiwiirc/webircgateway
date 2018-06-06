@@ -764,7 +764,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		tokenM := irc.Message{}
 		tokenM.Command = "BUFFERTOKEN"
 		tokenData := jwt.MapClaims{
-			"tkn_created": time.Now().UTC().Unix(),
+			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
 			"server":      c.UpstreamConfig.Hostname,
 			"nick":        c.IrcState.Nick,
 			"time_joined": 0,
