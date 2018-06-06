@@ -44,7 +44,7 @@ func (m *Message) ToLine() string {
 		}
 	}
 
-	if m.Prefix.Nick != "" || m.Prefix.Username != "" || m.Prefix.Hostname != "" {
+	if m.Prefix != nil && (m.Prefix.Nick != "" || m.Prefix.Username != "" || m.Prefix.Hostname != "") {
 		prefix := ""
 
 		if m.Prefix.Nick != "" {
