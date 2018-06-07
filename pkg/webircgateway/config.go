@@ -33,7 +33,7 @@ type ConfigServer struct {
 	TLS                  bool
 	CertFile             string
 	KeyFile              string
-	LetsEncryptCacheFile string
+	LetsEncryptCacheDir string
 }
 
 type ConfigProxy struct {
@@ -198,7 +198,11 @@ func LoadConfig() error {
 			server.TLS = confKeyAsBool(section.Key("tls"), false)
 			server.CertFile = confKeyAsString(section.Key("cert"), "")
 			server.KeyFile = confKeyAsString(section.Key("key"), "")
-			server.LetsEncryptCacheFile = confKeyAsString(section.Key("letsencrypt_cache"), "")
+			server.LetsEncryptCacheDir = confKeyAsString(section.Key("letsencrypt_cache"), "")
+			
+			if strings.HasSuffix(server.LetsEncryptCacheDir, ".cache") {
+				panic("Warning the config syntax has changed. Please update letsencrypt_cache to a directory path (eg ./cache)")
+			}
 
 			Config.Servers = append(Config.Servers, server)
 		}

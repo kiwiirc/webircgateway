@@ -13,7 +13,7 @@ import (
 	"errors"
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
-	"rsc.io/letsencrypt"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
@@ -141,7 +141,7 @@ func startServer(conf ConfigServer) {
 
 	if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "tcp:") {
 		tcpStartHandler(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
-	} else if conf.TLS && conf.LetsEncryptCacheFile == "" {
+	} else if conf.TLS && conf.LetsEncryptCacheDir == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
 			logOut(3, "'cert' and 'key' options must be set for TLS servers")
 			return
@@ -171,12 +171,13 @@ func startServer(conf ConfigServer) {
 		if err != nil {
 			logOut(3, "Failed to listen with TLS: %s", err.Error())
 		}
-	} else if conf.TLS && conf.LetsEncryptCacheFile != "" {
-		m := letsencrypt.Manager{}
-		err := m.CacheFile(conf.LetsEncryptCacheFile)
-		if err != nil {
-			logOut(3, "Failed to listen with letsencrypt TLS: %s", err.Error())
+	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
+		m := &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			Cache:      autocert.DirCache(conf.LetsEncryptCacheDir + "/"),
 		}
+		HttpRouter.Handle("/.well-known/", m.HTTPHandler(HttpRouter))
+
 		logOut(2, "Listening with letsencrypt TLS on %s", addr)
 		srv := &http.Server{
 			Addr: addr,
@@ -189,7 +190,7 @@ func startServer(conf ConfigServer) {
 		// Don't use HTTP2 since it doesn't support websockets
 		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
-		err = srv.ListenAndServeTLS("", "")
+		err := srv.ListenAndServeTLS("", "")
 		logOut(3, "Listening with letsencrypt failed: %s", err.Error())
 	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
 		socketFile := conf.LocalAddr[5:]
