@@ -199,6 +199,10 @@ func LoadConfig() error {
 			server.CertFile = confKeyAsString(section.Key("cert"), "")
 			server.KeyFile = confKeyAsString(section.Key("key"), "")
 			server.LetsEncryptCacheDir = confKeyAsString(section.Key("letsencrypt_cache"), "")
+			
+			if strings.HasSuffix(server.LetsEncryptCacheDir, ".cache") {
+				panic("Warning the config syntax has changed. Please update letsencrypt_cache to a directory path (eg ./cache)")
+			}
 
 			Config.Servers = append(Config.Servers, server)
 		}

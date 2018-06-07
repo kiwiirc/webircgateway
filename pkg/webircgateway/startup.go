@@ -174,7 +174,7 @@ func startServer(conf ConfigServer) {
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
 		m := &autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(conf.LetsEncryptCacheDir),
+			Cache:      autocert.DirCache(conf.LetsEncryptCacheDir + "/"),
 		}
 		HttpRouter.Handle("/.well-known/", m.HTTPHandler(HttpRouter))
 
