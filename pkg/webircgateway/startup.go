@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"errors"
 
@@ -23,6 +24,11 @@ var (
 	HttpRouter  *http.ServeMux
 	LogOutput   chan string
 	messageTags *MessageTagManager
+
+	// ensure only one instance of the manager and handler is running
+	// while allowing multiple listeners to use it
+	letsencryptMutex sync.Mutex
+	letsencryptManager *autocert.Manager
 )
 
 func init() {
@@ -172,17 +178,21 @@ func startServer(conf ConfigServer) {
 			logOut(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
-		m := &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(conf.LetsEncryptCacheDir + "/"),
+		letsencryptMutex.Lock()
+		if letsencryptManager == nil {
+			letsencryptManager := &autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				Cache:      autocert.DirCache(conf.LetsEncryptCacheDir + "/"),
+			}
+			HttpRouter.Handle("/.well-known/", letsencryptManager.HTTPHandler(HttpRouter))
 		}
-		HttpRouter.Handle("/.well-known/", m.HTTPHandler(HttpRouter))
+		letsencryptMutex.Unlock()
 
 		logOut(2, "Listening with letsencrypt TLS on %s", addr)
 		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
-				GetCertificate: m.GetCertificate,
+				GetCertificate: letsencryptManager.GetCertificate,
 			},
 			Handler: HttpRouter,
 		}
