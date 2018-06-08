@@ -315,7 +315,7 @@ func (c *Client) connectUpstream() {
 
 	// Send any WEBIRC lines
 	if upstreamConfig.WebircPassword != "" {
-		gatewayName := "websocketgateway"
+		gatewayName := "webircgateway"
 		if Config.GatewayName != "" {
 			gatewayName = Config.GatewayName
 		}
