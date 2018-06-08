@@ -37,7 +37,8 @@ port = 80
 #cert = server.crt
 #key = server.key
 # If you don't have a certificate, uncomment the below line to automatically generate a
-# free certificate using letsencrypt.com (overrides the above cert/key options)
+# free certificate using letsencrypt.com (overrides the above cert/key options). This requires
+# a server running on port 80 to initially generate the certificate.
 #letsencrypt_cache = ./certs
 
 # Example unix socket server
