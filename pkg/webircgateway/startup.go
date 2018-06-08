@@ -1,6 +1,7 @@
 package webircgateway
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -27,7 +28,7 @@ var (
 
 	// ensure only one instance of the manager and handler is running
 	// while allowing multiple listeners to use it
-	letsencryptMutex sync.Mutex
+	letsencryptMutex   sync.Mutex
 	letsencryptManager *autocert.Manager
 )
 
@@ -178,21 +179,12 @@ func startServer(conf ConfigServer) {
 			logOut(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
-		letsencryptMutex.Lock()
-		if letsencryptManager == nil {
-			letsencryptManager := &autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				Cache:      autocert.DirCache(conf.LetsEncryptCacheDir + "/"),
-			}
-			HttpRouter.Handle("/.well-known/", letsencryptManager.HTTPHandler(HttpRouter))
-		}
-		letsencryptMutex.Unlock()
-
 		logOut(2, "Listening with letsencrypt TLS on %s", addr)
+		leManager := getLEManager(conf.LetsEncryptCacheDir)
 		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
-				GetCertificate: letsencryptManager.GetCertificate,
+				GetCertificate: leManager.GetCertificate,
 			},
 			Handler: HttpRouter,
 		}
@@ -218,4 +210,24 @@ func startServer(conf ConfigServer) {
 		err := http.ListenAndServe(addr, HttpRouter)
 		logOut(3, err.Error())
 	}
+}
+
+func getLEManager(certCacheDir string) *autocert.Manager {
+	letsencryptMutex.Lock()
+	defer letsencryptMutex.Unlock()
+
+	// Create it if it doesn't already exist
+	if letsencryptManager == nil {
+		letsencryptManager = &autocert.Manager{
+			Prompt: autocert.AcceptTOS,
+			Cache:  autocert.DirCache(strings.TrimRight(certCacheDir, "/")),
+			HostPolicy: func(ctx context.Context, host string) error {
+				logOut(2, "Automatically requesting a HTTPS certificate for %s", host)
+				return nil
+			},
+		}
+		HttpRouter.Handle("/.well-known/", letsencryptManager.HTTPHandler(HttpRouter))
+	}
+
+	return letsencryptManager
 }
