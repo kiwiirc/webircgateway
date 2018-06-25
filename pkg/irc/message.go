@@ -78,7 +78,7 @@ func (m *Message) ToLine() string {
 
 	paramLen := len(m.Params)
 	for idx, param := range m.Params {
-		if idx == paramLen-1 && strings.Contains(param, " ") {
+		if idx == paramLen-1 && (strings.Contains(param, " ") || strings.HasPrefix(param, ":")) {
 			line += " :" + param
 		} else {
 			line += " " + param
