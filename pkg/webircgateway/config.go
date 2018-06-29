@@ -1,6 +1,7 @@
 package webircgateway
 
 import (
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -201,8 +202,7 @@ func LoadConfig() error {
 			server.LetsEncryptCacheDir = confKeyAsString(section.Key("letsencrypt_cache"), "")
 			
 			if strings.HasSuffix(server.LetsEncryptCacheDir, ".cache") {
-				logOut(3, "Warning the config syntax has changed. Please update letsencrypt_cache to a directory path (eg ./cache)")
-				os.Exit(1)
+				return errors.New("Syntax has changed. Please update letsencrypt_cache to a directory path (eg ./cache)")
 			}
 
 			Config.Servers = append(Config.Servers, server)
