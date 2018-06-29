@@ -459,7 +459,7 @@ func (c *Client) connectUpstream() {
 				pLen = len(m.Params)
 			}
 
-			if pLen > 0 && m.Command == "NICK" {
+			if pLen > 0 && m.Command == "NICK" && m.Prefix.Nick == c.IrcState.Nick {
 				client.IrcState.Nick = m.Params[0]
 			}
 			if pLen > 0 && m.Command == "001" {
