@@ -765,11 +765,14 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		tokenM.Command = "BUFFERTOKEN"
 		tokenData := jwt.MapClaims{
 			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
-			"server":      c.UpstreamConfig.Hostname,
+			"iss":         c.UpstreamConfig.Hostname,
 			"nick":        c.IrcState.Nick,
-			"time_joined": 0,
-			"joined":      false,
+			"account":     "",
+			"net_modes":   []string{},
 			"channel":     "",
+			"joined":      false,
+			"time_joined": 0,
+			"modes":       []string{},
 		}
 
 		if tokenFor == "" {
