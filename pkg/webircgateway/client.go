@@ -758,11 +758,11 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		return "", nil
 	}
 
-	if strings.ToUpper(message.Command) == "BUFFERTOKEN" {
+	if strings.ToUpper(message.Command) == "EXTJWT" {
 		tokenFor := message.GetParam(0, "")
 
 		tokenM := irc.Message{}
-		tokenM.Command = "BUFFERTOKEN"
+		tokenM.Command = "EXTJWT"
 		tokenData := jwt.MapClaims{
 			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
 			"iss":         c.UpstreamConfig.Hostname,
