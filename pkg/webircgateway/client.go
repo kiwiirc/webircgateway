@@ -467,9 +467,7 @@ func (c *Client) connectUpstream() {
 				client.State = ClientStateConnected
 			}
 			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
-				channel := &irc.StateChannel{}
-				channel.Name = m.GetParam(0, "")
-				channel.Joined = time.Now()
+				channel := irc.NewStateChannel(m.GetParam(0, ""))
 				c.IrcState.SetChannel(channel)
 			}
 			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
@@ -477,6 +475,41 @@ func (c *Client) connectUpstream() {
 			}
 			if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
 				c.IrcState.ClearChannels()
+			}
+			// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
+			if pLen > 0 && m.Command == "MODE" {
+				if strings.HasPrefix(m.GetParam(0, ""), "#") {
+					channelName := m.GetParam(0, "")
+					modes := m.GetParam(1, "")
+
+					channel := c.IrcState.GetChannel(channelName)
+					if channel != nil {
+						channel = irc.NewStateChannel(channelName)
+						c.IrcState.SetChannel(channel)
+					}
+
+					adding := false
+					paramIdx := 1
+					for i := 0; i < len(modes); i++ {
+						mode := string(modes[i])
+
+						if mode == "+" {
+							adding = true
+						} else if mode == "-" {
+							adding = false
+						} else {
+							paramIdx++
+							param := m.GetParam(paramIdx, "")
+							if strings.ToLower(param) == strings.ToLower(c.IrcState.Nick) {
+								if adding {
+									channel.Modes[mode] = ""
+								} else {
+									delete(channel.Modes, mode)
+								}
+							}
+						}
+					}
+				}
 			}
 
 			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
@@ -785,6 +818,12 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 				tokenData["time_joined"] = tokenForChan.Joined.Unix()
 				tokenData["channel"] = tokenForChan.Name
 				tokenData["joined"] = true
+
+				modes := []string{}
+				for mode := range tokenForChan.Modes {
+					modes = append(modes, mode)
+				}
+				tokenData["modes"] = modes
 			} else {
 				tokenData["channel"] = tokenFor
 			}

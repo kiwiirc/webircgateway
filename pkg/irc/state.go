@@ -62,3 +62,11 @@ type StateChannel struct {
 	Modes  map[string]string
 	Joined time.Time
 }
+
+func NewStateChannel(name string) *StateChannel {
+	return &StateChannel{
+		Name:   name,
+		Modes:  make(map[string]string),
+		Joined: time.Now(),
+	}
+}
