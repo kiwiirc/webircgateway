@@ -28,12 +28,12 @@ type ConfigUpstream struct {
 
 // ConfigServer - A web server config
 type ConfigServer struct {
-	LocalAddr            string
-	BindMode             os.FileMode
-	Port                 int
-	TLS                  bool
-	CertFile             string
-	KeyFile              string
+	LocalAddr           string
+	BindMode            os.FileMode
+	Port                int
+	TLS                 bool
+	CertFile            string
+	KeyFile             string
 	LetsEncryptCacheDir string
 }
 
@@ -47,7 +47,7 @@ type ConfigProxy struct {
 }
 
 // Config - Config options for the running app
-var Config struct {
+type Config struct {
 	ConfigFile            string
 	LogLevel              int
 	Gateway               bool
@@ -73,42 +73,43 @@ var Config struct {
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
-func ConfigResolvePath(path string) string {
+func (c *Config) ResolvePath(path string) string {
 	// Absolute paths should stay as they are
 	if path[0:1] == "/" {
 		return path
 	}
 
-	resolved := filepath.Dir(Config.ConfigFile)
+	resolved := filepath.Dir(c.ConfigFile)
 	resolved = filepath.Clean(resolved + "/" + path)
 	return resolved
 }
 
-func SetConfigFile(ConfigFile string) {
+func (c *Config) SetConfigFile(configFile string) {
 	// Config paths starting with $ is executed rather than treated as a path
-	if strings.HasPrefix(ConfigFile, "$ ") {
-		Config.ConfigFile = ConfigFile
+	if strings.HasPrefix(configFile, "$ ") {
+		c.ConfigFile = configFile
 	} else {
-		Config.ConfigFile, _ = filepath.Abs(ConfigFile)
+		c.ConfigFile, _ = filepath.Abs(configFile)
 	}
 }
 
 // CurrentConfigFile - Return the full path or command for the config file in use
-func CurrentConfigFile() string {
-	return Config.ConfigFile
+func (c *Config) CurrentConfigFile() string {
+	return c.ConfigFile
 }
-func LoadConfig() error {
+
+func (c *Config) Load() error {
 	var configSrc interface{}
 
-	if strings.HasPrefix(Config.ConfigFile, "$ ") {
-		cmdRawOut, err := exec.Command("sh", "-c", Config.ConfigFile[2:]).Output()
+	if strings.HasPrefix(c.ConfigFile, "$ ") {
+		cmdRawOut, err := exec.Command("sh", "-c", c.ConfigFile[2:]).Output()
 		if err != nil {
 			return err
 		}
 
 		configSrc = cmdRawOut
 	} else {
-		configSrc = Config.ConfigFile
+		configSrc = c.ConfigFile
 	}
 
 	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, configSrc)
@@ -117,40 +118,40 @@ func LoadConfig() error {
 	}
 
 	// Clear the existing config
-	Config.Gateway = false
-	Config.GatewayWebircPassword = make(map[string]string)
-	Config.Upstreams = []ConfigUpstream{}
-	Config.Servers = []ConfigServer{}
-	Config.ServerEngines = []string{}
-	Config.RemoteOrigins = []glob.Glob{}
-	Config.GatewayWhitelist = []glob.Glob{}
-	Config.ReverseProxies = []net.IPNet{}
-	Config.Webroot = ""
-	Config.ReCaptchaSecret = ""
-	Config.ReCaptchaKey = ""
-	Config.RequiresVerification = false
-	Config.Secret = ""
-	Config.ClientRealname = ""
-	Config.ClientUsername = ""
-	Config.ClientHostname = ""
+	c.Gateway = false
+	c.GatewayWebircPassword = make(map[string]string)
+	c.Upstreams = []ConfigUpstream{}
+	c.Servers = []ConfigServer{}
+	c.ServerEngines = []string{}
+	c.RemoteOrigins = []glob.Glob{}
+	c.GatewayWhitelist = []glob.Glob{}
+	c.ReverseProxies = []net.IPNet{}
+	c.Webroot = ""
+	c.ReCaptchaSecret = ""
+	c.ReCaptchaKey = ""
+	c.RequiresVerification = false
+	c.Secret = ""
+	c.ClientRealname = ""
+	c.ClientUsername = ""
+	c.ClientHostname = ""
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
-			Config.LogLevel = section.Key("logLevel").MustInt(3)
+			c.LogLevel = section.Key("logLevel").MustInt(3)
 			if Config.LogLevel < 1 || Config.LogLevel > 3 {
 				logOut(3, "Config option logLevel must be between 1-3. Setting default value of 3.")
-				Config.LogLevel = 3
+				c.LogLevel = 3
 			}
 
-			Config.Identd = section.Key("identd").MustBool(false)
+			c.Identd = section.Key("identd").MustBool(false)
 
-			Config.GatewayName = section.Key("gateway_name").MustString("")
+			c.GatewayName = section.Key("gateway_name").MustString("")
 			if strings.Contains(Config.GatewayName, " ") {
 				logOut(3, "Config option gateway_name must not contain spaces")
-				Config.GatewayName = ""
+				c.GatewayName = ""
 			}
 
-			Config.Secret = section.Key("secret").MustString("")
+			c.Secret = section.Key("secret").MustString("")
 		}
 
 		if section.Name() == "verify" {
@@ -163,26 +164,26 @@ func LoadConfig() error {
 		}
 
 		if section.Name() == "gateway" {
-			Config.Gateway = section.Key("enabled").MustBool(false)
-			Config.GatewayTimeout = section.Key("timeout").MustInt(10)
-			Config.GatewayThrottle = section.Key("throttle").MustInt(2)
+			c.Gateway = section.Key("enabled").MustBool(false)
+			c.GatewayTimeout = section.Key("timeout").MustInt(10)
+			c.GatewayThrottle = section.Key("throttle").MustInt(2)
 		}
 
 		if section.Name() == "gateway.webirc" {
 			for _, serverAddr := range section.KeyStrings() {
-				Config.GatewayWebircPassword[serverAddr] = section.Key(serverAddr).MustString("")
+				c.GatewayWebircPassword[serverAddr] = section.Key(serverAddr).MustString("")
 			}
 		}
 
 		if strings.Index(section.Name(), "clients") == 0 {
-			Config.ClientUsername = section.Key("username").MustString("")
-			Config.ClientRealname = section.Key("realname").MustString("")
-			Config.ClientHostname = section.Key("hostname").MustString("")
+			c.ClientUsername = section.Key("username").MustString("")
+			c.ClientRealname = section.Key("realname").MustString("")
+			c.ClientHostname = section.Key("hostname").MustString("")
 		}
 
 		if strings.Index(section.Name(), "fileserving") == 0 {
 			if section.Key("enabled").MustBool(false) {
-				Config.Webroot = section.Key("webroot").MustString("")
+				c.Webroot = section.Key("webroot").MustString("")
 			}
 		}
 
@@ -200,12 +201,12 @@ func LoadConfig() error {
 			server.CertFile = confKeyAsString(section.Key("cert"), "")
 			server.KeyFile = confKeyAsString(section.Key("key"), "")
 			server.LetsEncryptCacheDir = confKeyAsString(section.Key("letsencrypt_cache"), "")
-			
+
 			if strings.HasSuffix(server.LetsEncryptCacheDir, ".cache") {
 				return errors.New("Syntax has changed. Please update letsencrypt_cache to a directory path (eg ./cache)")
 			}
 
-			Config.Servers = append(Config.Servers, server)
+			c.Servers = append(c.Servers, server)
 		}
 
 		if strings.Index(section.Name(), "upstream.") == 0 {
@@ -232,7 +233,7 @@ func LoadConfig() error {
 				upstream.GatewayName = ""
 			}
 
-			Config.Upstreams = append(Config.Upstreams, upstream)
+			c.Upstreams = append(c.Upstreams, upstream)
 		}
 
 		if strings.Index(section.Name(), "engines") == 0 {
@@ -248,7 +249,7 @@ func LoadConfig() error {
 					logOut(3, "Config section allowed_origins has invalid match, "+origin)
 					continue
 				}
-				Config.RemoteOrigins = append(Config.RemoteOrigins, match)
+				c.RemoteOrigins = append(c.RemoteOrigins, match)
 			}
 		}
 
@@ -259,7 +260,7 @@ func LoadConfig() error {
 					logOut(3, "Config section gateway.whitelist has invalid match, "+origin)
 					continue
 				}
-				Config.GatewayWhitelist = append(Config.GatewayWhitelist, match)
+				c.GatewayWhitelist = append(c.GatewayWhitelist, match)
 			}
 		}
 
@@ -270,7 +271,7 @@ func LoadConfig() error {
 					logOut(3, "Config section reverse_proxies has invalid entry, "+cidrRange)
 					continue
 				}
-				Config.ReverseProxies = append(Config.ReverseProxies, *validRange)
+				c.ReverseProxies = append(c.ReverseProxies, *validRange)
 			}
 		}
 	}

@@ -45,38 +45,40 @@ func runGateway(configFile string) {
 	// Print any webircgateway logout to STDOUT
 	go printLogOutput()
 
-	webircgateway.SetConfigFile(configFile)
+	// Listen for process signals
+	go watchForSignals()
+
+	gateway := webircgateway.NewServer()
+
+	gateway.Config.SetConfigFile(configFile)
 	log.Printf("Using config %s", webircgateway.CurrentConfigFile())
 
-	err := webircgateway.LoadConfig()
+	configErr := gateway.Config.Load()
 	if err != nil {
 		log.Printf("Config file error: %s", err.Error())
 		os.Exit(1)
 	}
 
-	watchForSignals()
-	webircgateway.Prepare()
-	webircgateway.Listen()
+	gateway.Start()
 
 	justWait := make(chan bool)
 	<-justWait
 }
 
-func watchForSignals() {
+func watchForSignals(gateway *webircgateway.Server) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
-	go func() {
-		for {
-			<-c
-			fmt.Println("Recieved SIGHUP, reloading config file")
-			webircgateway.LoadConfig()
-		}
-	}()
+
+	for {
+		<-c
+		fmt.Println("Recieved SIGHUP, reloading config file")
+		gateway.Config.Load()
+	}
 }
 
-func printLogOutput() {
+func printLogOutput(gateway *webircgateway.Server) {
 	for {
-		line, _ := <-webircgateway.LogOutput
+		line, _ := <-gateway.LogOutput
 		log.Println(line)
 	}
 }
