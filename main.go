@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"plugin"
 	"syscall"
 
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
@@ -59,6 +60,8 @@ func runGateway(configFile string) {
 		os.Exit(1)
 	}
 
+	loadPlugins(gateway)
+
 	gateway.Start()
 
 	justWait := make(chan bool)
@@ -80,5 +83,27 @@ func printLogOutput(gateway *webircgateway.Gateway) {
 	for {
 		line, _ := <-gateway.LogOutput
 		log.Println(line)
+	}
+}
+
+func loadPlugins(gateway *webircgateway.Gateway) {
+	for _, pluginPath := range gateway.Config.Plugins {
+		pluginFullPath := gateway.Config.ResolvePath(pluginPath)
+
+		gateway.Log(2, "Loading plugin " + pluginFullPath)
+		p, err := plugin.Open(pluginFullPath)
+		if err != nil {
+			gateway.Log(3, "Error loading plugin: " + err.Error())
+			continue
+		}
+
+		startSymbol, err := p.Lookup("Start")
+		if err != nil {
+			gateway.Log(3, "Plugin does not export a Start function! (%s)", pluginFullPath)
+			continue
+		}
+
+		startFunc := startSymbol.(func(*webircgateway.Gateway))
+		startFunc(gateway)
 	}
 }

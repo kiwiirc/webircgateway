@@ -71,6 +71,7 @@ type Config struct {
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
+	Plugins []string
 }
 
 func NewConfig(gateway *Gateway) *Config {
@@ -244,6 +245,12 @@ func (c *Config) Load() error {
 		if strings.Index(section.Name(), "engines") == 0 {
 			for _, engine := range section.KeyStrings() {
 				c.ServerEngines = append(c.ServerEngines, strings.Trim(engine, "\n"))
+			}
+		}
+
+		if strings.Index(section.Name(), "plugins") == 0 {
+			for _, plugin := range section.KeyStrings() {
+				c.Plugins = append(c.Plugins, strings.Trim(plugin, "\n"))
 			}
 		}
 
