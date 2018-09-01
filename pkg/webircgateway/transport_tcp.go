@@ -1,6 +1,7 @@
 package webircgateway
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -69,12 +70,11 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 
 	// Read from TCP
 	go func() {
+		reader := bufio.NewReader(conn)
 		for {
-			r := make([]byte, 1024)
-			len, err := conn.Read(r)
-			if err == nil && len > 0 {
-				message := string(r[:len])
-				message = strings.TrimRight(message, "\r\n")
+			data, err := reader.ReadString('\n')
+			if err == nil {
+				message := strings.TrimRight(data, "\r\n")
 				client.Log(1, "client->: %s", message)
 				select {
 				case client.Recv <- message:
@@ -83,12 +83,10 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 					// TODO: Should this really just drop the data or close the connection?
 				}
 
-			} else if err != nil {
+			} else {
 				client.Log(1, "TCP connection closed (%s)", err.Error())
 				break
 
-			} else if len == 0 {
-				client.Log(1, "Got 0 bytes from TCP")
 			}
 		}
 
