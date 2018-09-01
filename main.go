@@ -42,7 +42,7 @@ func runProxy() {
 }
 
 func runGateway(configFile string) {
-	gateway := webircgateway.NewServer()
+	gateway := webircgateway.NewGateway()
 
 	// Print any webircgateway logout to STDOUT
 	go printLogOutput(gateway)
@@ -65,7 +65,7 @@ func runGateway(configFile string) {
 	<-justWait
 }
 
-func watchForSignals(gateway *webircgateway.Server) {
+func watchForSignals(gateway *webircgateway.Gateway) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
 
@@ -76,7 +76,7 @@ func watchForSignals(gateway *webircgateway.Server) {
 	}
 }
 
-func printLogOutput(gateway *webircgateway.Server) {
+func printLogOutput(gateway *webircgateway.Gateway) {
 	for {
 		line, _ := <-gateway.LogOutput
 		log.Println(line)

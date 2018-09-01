@@ -9,10 +9,10 @@ import (
 )
 
 type TransportTcp struct {
-	gateway *Server
+	gateway *Gateway
 }
 
-func (t *TransportTcp) Init(g *Server) {
+func (t *TransportTcp) Init(g *Gateway) {
 	t.gateway = g
 }
 

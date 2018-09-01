@@ -48,7 +48,7 @@ type ConfigProxy struct {
 
 // Config - Config options for the running app
 type Config struct {
-	gateway               *Server
+	gateway               *Gateway
 	ConfigFile            string
 	LogLevel              int
 	Gateway               bool
@@ -73,7 +73,7 @@ type Config struct {
 	Secret                string
 }
 
-func NewConfig(gateway *Server) *Config {
+func NewConfig(gateway *Gateway) *Config {
 	return &Config{gateway: gateway}
 }
 

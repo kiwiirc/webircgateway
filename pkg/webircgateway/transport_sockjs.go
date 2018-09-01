@@ -8,10 +8,10 @@ import (
 )
 
 type TransportSockjs struct {
-	gateway *Server
+	gateway *Gateway
 }
 
-func (t *TransportSockjs) Init(g *Server) {
+func (t *TransportSockjs) Init(g *Gateway) {
 	t.gateway = g
 	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, t.sessionHandler)
 	t.gateway.HttpRouter.Handle("/webirc/sockjs/", sockjsHandler)

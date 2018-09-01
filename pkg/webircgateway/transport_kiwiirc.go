@@ -13,10 +13,10 @@ import (
 )
 
 type TransportKiwiirc struct {
-	gateway *Server
+	gateway *Gateway
 }
 
-func (t *TransportKiwiirc) Init(g *Server) {
+func (t *TransportKiwiirc) Init(g *Gateway) {
 	t.gateway = g
 	handler := sockjs.NewHandler("/webirc/kiwiirc", sockjs.DefaultOptions, t.sessionHandler)
 	t.gateway.HttpRouter.Handle("/webirc/kiwiirc/", handler)

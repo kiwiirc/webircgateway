@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-func (s *Server) NewClient() *Client {
+func (s *Gateway) NewClient() *Client {
 	return NewClient(s)
 }
-func (s *Server) isClientOriginAllowed(originHeader string) bool {
+func (s *Gateway) isClientOriginAllowed(originHeader string) bool {
 	// Empty list of origins = all origins allowed
 	if len(s.Config.RemoteOrigins) == 0 {
 		return true
@@ -34,7 +34,7 @@ func (s *Server) isClientOriginAllowed(originHeader string) bool {
 	return foundMatch
 }
 
-func (s *Server) isIrcAddressAllowed(addr string) bool {
+func (s *Gateway) isIrcAddressAllowed(addr string) bool {
 	// Empty whitelist = all destinations allowed
 	if len(s.Config.GatewayWhitelist) == 0 {
 		return true
@@ -52,7 +52,7 @@ func (s *Server) isIrcAddressAllowed(addr string) bool {
 	return foundMatch
 }
 
-func (s *Server) findUpstream() (ConfigUpstream, error) {
+func (s *Gateway) findUpstream() (ConfigUpstream, error) {
 	var ret ConfigUpstream
 
 	if len(s.Config.Upstreams) == 0 {
@@ -65,7 +65,7 @@ func (s *Server) findUpstream() (ConfigUpstream, error) {
 	return ret, nil
 }
 
-func (s *Server) findWebircPassword(ircHost string) string {
+func (s *Gateway) findWebircPassword(ircHost string) string {
 	pass, exists := s.Config.GatewayWebircPassword[strings.ToLower(ircHost)]
 	if !exists {
 		pass = ""
@@ -74,7 +74,7 @@ func (s *Server) findWebircPassword(ircHost string) string {
 	return pass
 }
 
-func (s *Server) GetRemoteAddressFromRequest(req *http.Request) net.IP {
+func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
 
 	// Some web listeners such as unix sockets don't get a RemoteAddr, so default to localhost
@@ -112,7 +112,7 @@ func (s *Server) GetRemoteAddressFromRequest(req *http.Request) net.IP {
 
 }
 
-func (s *Server) isRequestSecure(req *http.Request) bool {
+func (s *Gateway) isRequestSecure(req *http.Request) bool {
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
 	remoteIP := net.ParseIP(remoteAddr)
 

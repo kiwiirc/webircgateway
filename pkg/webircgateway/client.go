@@ -39,7 +39,7 @@ type ClientSignal [3]string
 
 // Client - Connecting client struct
 type Client struct {
-	Server           *Server
+	Gateway          *Gateway
 	Id               int
 	State            string
 	EndWG            sync.WaitGroup
@@ -73,12 +73,12 @@ type Client struct {
 var nextClientID = 1
 
 // NewClient - Makes a new client
-func NewClient(server *Server) *Client {
+func NewClient(gateway *Gateway) *Client {
 	thisID := nextClientID
 	nextClientID++
 
 	c := &Client{
-		Server:       server,
+		Gateway:      gateway,
 		Id:           thisID,
 		State:        ClientStateIdle,
 		Recv:         make(chan string, 50),
@@ -90,7 +90,7 @@ func NewClient(server *Server) *Client {
 	}
 
 	// Auto verify the client if it's not needed
-	if !server.Config.RequiresVerification {
+	if !gateway.Config.RequiresVerification {
 		c.Verified = true
 	}
 
@@ -99,11 +99,11 @@ func NewClient(server *Server) *Client {
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
-	server.Clients.Set(string(c.Id), c)
+	gateway.Clients.Set(string(c.Id), c)
 	go func() {
 		time.Sleep(time.Second * 3)
 		c.EndWG.Wait()
-		server.Clients.Remove(string(c.Id))
+		gateway.Clients.Remove(string(c.Id))
 	}()
 
 	return c
@@ -112,7 +112,7 @@ func NewClient(server *Server) *Client {
 // Log - Log a line of text with context of this client
 func (c *Client) Log(level int, format string, args ...interface{}) {
 	prefix := fmt.Sprintf("client:%d ", c.Id)
-	c.Server.Log(level, prefix+format, args...)
+	c.Gateway.Log(level, prefix+format, args...)
 }
 
 func (c *Client) IsShuttingDown() bool {
@@ -187,7 +187,7 @@ func (c *Client) connectUpstream() {
 	if client.DestHost == "" {
 		client.Log(2, "Using pre-set upstream")
 		var err error
-		upstreamConfig, err = c.Server.findUpstream()
+		upstreamConfig, err = c.Gateway.findUpstream()
 		if err != nil {
 			client.Log(3, "No upstreams available")
 			client.SendIrcError("The server has not been configured")
@@ -195,7 +195,7 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
-		if !c.Server.isIrcAddressAllowed(client.DestHost) {
+		if !c.Gateway.isIrcAddressAllowed(client.DestHost) {
 			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
 			client.SendIrcError("Not allowed to connect to " + client.DestHost)
 			client.SendClientSignal("state", "closed", "err_forbidden")
@@ -247,14 +247,14 @@ func (c *Client) connectUpstream() {
 
 		// Add the ports into the identd before possible TLS handshaking. If we do it after then
 		// there's a good chance the identd lookup will occur before the handshake has finished
-		if c.Server.Config.Identd {
+		if c.Gateway.Config.Identd {
 			// Keep track of the upstreams local and remote port numbers
 			_, lPortStr, _ := net.SplitHostPort(conn.LocalAddr().String())
 			client.IrcState.LocalPort, _ = strconv.Atoi(lPortStr)
 			_, rPortStr, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			client.IrcState.RemotePort, _ = strconv.Atoi(rPortStr)
 
-			c.Server.identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username, "")
+			c.Gateway.identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username, "")
 		}
 
 		if upstreamConfig.TLS {
@@ -314,8 +314,8 @@ func (c *Client) connectUpstream() {
 	// Send any WEBIRC lines
 	if upstreamConfig.WebircPassword != "" {
 		gatewayName := "webircgateway"
-		if c.Server.Config.GatewayName != "" {
-			gatewayName = c.Server.Config.GatewayName
+		if c.Gateway.Config.GatewayName != "" {
+			gatewayName = c.Gateway.Config.GatewayName
 		}
 		if upstreamConfig.GatewayName != "" {
 			gatewayName = upstreamConfig.GatewayName
@@ -327,8 +327,8 @@ func (c *Client) connectUpstream() {
 		}
 
 		clientHostname := client.RemoteHostname
-		if c.Server.Config.ClientHostname != "" {
-			clientHostname = makeClientReplacements(c.Server.Config.ClientHostname, client)
+		if c.Gateway.Config.ClientHostname != "" {
+			clientHostname = makeClientReplacements(c.Gateway.Config.ClientHostname, client)
 		}
 
 		remoteAddr := client.RemoteAddr
@@ -542,10 +542,10 @@ func (c *Client) connectUpstream() {
 				}
 			}
 
-			if m != nil && client.Features.Messagetags && c.Server.messageTags.CanMessageContainClientTags(m) {
+			if m != nil && client.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(m) {
 				// If we have any message tags stored for this message from a previous PRIVMSG sent
 				// by a client, add them back in
-				mTags, mTagsExists := c.Server.messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
+				mTags, mTagsExists := c.Gateway.messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
 				if mTagsExists {
 					for k, v := range mTags.Tags {
 						m.Tags[k] = v
@@ -562,7 +562,7 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("upstream_closed")
 		upstream.Close()
 		if client.IrcState.RemotePort > 0 {
-			c.Server.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
+			c.Gateway.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
 		}
 	}()
 }
@@ -639,9 +639,9 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.Hostname = c.DestHost
 	upstreamConfig.Port = c.DestPort
 	upstreamConfig.TLS = c.DestTLS
-	upstreamConfig.Timeout = c.Server.Config.GatewayTimeout
-	upstreamConfig.Throttle = c.Server.Config.GatewayThrottle
-	upstreamConfig.WebircPassword = c.Server.findWebircPassword(c.DestHost)
+	upstreamConfig.Timeout = c.Gateway.Config.GatewayTimeout
+	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
+	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
 
 	return upstreamConfig
 }
@@ -664,7 +664,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		verified := false
 		if len(message.Params) >= 1 {
 			captcha := recaptcha.R{
-				Secret: c.Server.Config.ReCaptchaSecret,
+				Secret: c.Gateway.Config.ReCaptchaSecret,
 			}
 
 			verified = captcha.VerifyResponse(message.Params[0])
@@ -687,11 +687,11 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 			return line, errors.New("Invalid USER line")
 		}
 
-		if c.Server.Config.ClientUsername != "" {
-			message.Params[0] = makeClientReplacements(c.Server.Config.ClientUsername, c)
+		if c.Gateway.Config.ClientUsername != "" {
+			message.Params[0] = makeClientReplacements(c.Gateway.Config.ClientUsername, c)
 		}
-		if c.Server.Config.ClientRealname != "" {
-			message.Params[3] = makeClientReplacements(c.Server.Config.ClientRealname, c)
+		if c.Gateway.Config.ClientRealname != "" {
+			message.Params[3] = makeClientReplacements(c.Gateway.Config.ClientRealname, c)
 		}
 
 		line = message.ToLine()
@@ -721,7 +721,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		// HOST irc.network.net:6667
 		// HOST irc.network.net:+6667
 
-		if !c.Server.Config.Gateway {
+		if !c.Gateway.Config.Gateway {
 			return "", nil
 		}
 
@@ -772,8 +772,8 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 	}
 
 	// Check for any client message tags so that we can store them for replaying to other clients
-	if c.Features.Messagetags && c.Server.messageTags.CanMessageContainClientTags(message) {
-		c.Server.messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
+	if c.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(message) {
+		c.Gateway.messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
 		// Prevent any client tags heading upstream
 		for k := range message.Tags {
 			if k[0] == '+' {
@@ -796,7 +796,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 
 		thisHost := strings.ToLower(c.UpstreamConfig.Hostname)
 		target := message.Params[0]
-		for val := range c.Server.Clients.Iter() {
+		for val := range c.Gateway.Clients.Iter() {
 			curClient := val.Val.(*Client)
 			sameHost := strings.ToLower(curClient.UpstreamConfig.Hostname) == thisHost
 			if !sameHost {
@@ -854,7 +854,7 @@ func (c *Client) ProcesIncomingLine(line string) (string, error) {
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
-		tokenSigned, tokenSignedErr := token.SignedString([]byte(c.Server.Config.Secret))
+		tokenSigned, tokenSignedErr := token.SignedString([]byte(c.Gateway.Config.Secret))
 		if tokenSignedErr != nil {
 			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
 			println(tokenSignedErr.Error())

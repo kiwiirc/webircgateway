@@ -13,10 +13,10 @@ type LEManager struct {
 	// while allowing multiple listeners to use it
 	Mutex   sync.Mutex
 	Manager *autocert.Manager
-	gateway *Server
+	gateway *Gateway
 }
 
-func NewLetsEncryptManager(gateway *Server) *LEManager {
+func NewLetsEncryptManager(gateway *Gateway) *LEManager {
 	return &LEManager{gateway: gateway}
 }
 

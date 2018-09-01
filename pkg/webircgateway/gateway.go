@@ -16,7 +16,11 @@ import (
 	"github.com/orcaman/concurrent-map"
 )
 
-type Server struct {
+var (
+	Version = "-"
+)
+
+type Gateway struct {
 	Config      *Config
 	HttpRouter  *http.ServeMux
 	LogOutput   chan string
@@ -26,8 +30,8 @@ type Server struct {
 	Acme        *LEManager
 }
 
-func NewServer() *Server {
-	s := &Server{}
+func NewGateway() *Gateway {
+	s := &Gateway{}
 	s.Config = NewConfig(s)
 	s.HttpRouter = http.NewServeMux()
 	s.LogOutput = make(chan string, 5)
@@ -40,7 +44,7 @@ func NewServer() *Server {
 	return s
 }
 
-func (s *Server) Log(level int, format string, args ...interface{}) {
+func (s *Gateway) Log(level int, format string, args ...interface{}) {
 	if level < s.Config.LogLevel {
 		return
 	}
@@ -53,7 +57,7 @@ func (s *Server) Log(level int, format string, args ...interface{}) {
 	}
 }
 
-func (s *Server) Start() {
+func (s *Gateway) Start() {
 	s.maybeStartStaticFileServer()
 	s.initHttpRoutes()
 	s.maybeStartIdentd()
@@ -63,7 +67,7 @@ func (s *Server) Start() {
 	}
 }
 
-func (s *Server) maybeStartStaticFileServer() {
+func (s *Gateway) maybeStartStaticFileServer() {
 	if s.Config.Webroot != "" {
 		webroot := s.Config.ResolvePath(s.Config.Webroot)
 		s.Log(2, "Serving files from %s", webroot)
@@ -71,7 +75,7 @@ func (s *Server) maybeStartStaticFileServer() {
 	}
 }
 
-func (s *Server) initHttpRoutes() error {
+func (s *Gateway) initHttpRoutes() error {
 	// Add all the transport routes
 	engineConfigured := false
 	for _, serverEngine := range s.Config.ServerEngines {
@@ -133,7 +137,7 @@ func (s *Server) initHttpRoutes() error {
 	return nil
 }
 
-func (s *Server) maybeStartIdentd() {
+func (s *Gateway) maybeStartIdentd() {
 	if s.Config.Identd {
 		err := s.identdServ.Run()
 		if err != nil {
@@ -144,7 +148,7 @@ func (s *Server) maybeStartIdentd() {
 	}
 }
 
-func (s *Server) startServer(conf ConfigServer) {
+func (s *Gateway) startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
 	if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "tcp:") {
@@ -214,13 +218,3 @@ func (s *Server) startServer(conf ConfigServer) {
 		s.Log(3, err.Error())
 	}
 }
-
-var (
-	// Version - The current version of webircgateway
-	Version = "-"
-	//identdServ  identd.Server
-	//HttpRouter  *http.ServeMux
-	//LogOutput   chan string
-	//messageTags *MessageTagManager
-
-)

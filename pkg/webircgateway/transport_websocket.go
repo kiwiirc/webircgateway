@@ -9,10 +9,10 @@ import (
 )
 
 type TransportWebsocket struct {
-	gateway *Server
+	gateway *Gateway
 }
 
-func (t *TransportWebsocket) Init(g *Server) {
+func (t *TransportWebsocket) Init(g *Gateway) {
 	t.gateway = g
 	t.gateway.HttpRouter.Handle("/webirc/websocket/", websocket.Handler(t.websocketHandler))
 }
