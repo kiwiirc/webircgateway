@@ -35,6 +35,15 @@ const (
 	ClientStateEnding = "ending"
 )
 
+// The upstream connection object may be either a TCP client or a KiwiProxy
+// instance. Create a common interface we can use that satisfies either
+// case.
+type ConnInterface interface {
+	io.Reader
+	io.Writer
+	Close() error
+}
+
 type ClientSignal [3]string
 
 // Client - Connecting client struct
@@ -171,21 +180,10 @@ func (c *Client) connectUpstream() {
 
 	c.UpstreamStarted = true
 
-	// The upstream connection object may be either a TCP client or a KiwiProxy
-	// instance. Create a common interface we can use that satisfies either
-	// case.
-	type ConnInterface interface {
-		io.Reader
-		io.Writer
-		Close() error
-	}
-	var upstream ConnInterface
-
 	var upstreamConfig ConfigUpstream
-	c.UpstreamConfig = &upstreamConfig
 
 	if client.DestHost == "" {
-		client.Log(2, "Using pre-set upstream")
+		client.Log(2, "Using configured upstream")
 		var err error
 		upstreamConfig, err = c.Gateway.findUpstream()
 		if err != nil {
@@ -207,6 +205,8 @@ func (c *Client) connectUpstream() {
 		upstreamConfig = c.configureUpstream()
 	}
 
+	c.UpstreamConfig = &upstreamConfig
+
 	hook := &HookIrcConnectionPre{
 		Client:         client,
 		UpstreamConfig: &upstreamConfig,
@@ -219,6 +219,25 @@ func (c *Client) connectUpstream() {
 	}
 
 	client.State = ClientStateConnecting
+
+	upstream, upstreamErr := client.makeUpstreamConnection()
+	if upstreamErr != nil {
+		// Error handling was already managed in makeUpstreamConnection()
+		return
+	}
+
+	client.State = ClientStateRegistering
+
+	client.writeWebircLines(upstream)
+	client.SendClientSignal("state", "connected")
+	client.proxyData(upstream)
+}
+
+func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
+
+	var connection ConnInterface
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -242,7 +261,7 @@ func (c *Client) connectUpstream() {
 			}
 			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
-			return
+			return nil, errors.New("error connecting upstream")
 		}
 
 		// Add the ports into the identd before possible TLS handshaking. If we do it after then
@@ -265,14 +284,16 @@ func (c *Client) connectUpstream() {
 				client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
 				client.SendClientSignal("state", "closed", "err_tls")
 				client.StartShutdown("err_connecting_upstream")
-				return
+				return nil, errors.New("error connecting upstream")
 			}
 
 			conn = net.Conn(tlsConn)
 		}
 
-		upstream = ConnInterface(conn)
-	} else {
+		connection = ConnInterface(conn)
+	}
+
+	if upstreamConfig.Proxy != nil {
 		// Connect to the IRCd via a proxy
 		conn := proxy.MakeKiwiProxyConnection()
 		conn.DestHost = upstreamConfig.Hostname
@@ -303,56 +324,62 @@ func (c *Client) connectUpstream() {
 
 			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
-			return
+			return nil, errors.New("error connecting upstream")
 		}
 
-		upstream = ConnInterface(conn)
+		connection = ConnInterface(conn)
 	}
 
-	client.State = ClientStateRegistering
+	return connection, nil
+}
 
+func (c *Client) writeWebircLines(upstream ConnInterface) {
 	// Send any WEBIRC lines
-	if upstreamConfig.WebircPassword != "" {
-		gatewayName := "webircgateway"
-		if c.Gateway.Config.GatewayName != "" {
-			gatewayName = c.Gateway.Config.GatewayName
-		}
-		if upstreamConfig.GatewayName != "" {
-			gatewayName = upstreamConfig.GatewayName
-		}
-
-		webircTags := c.buildWebircTags()
-		if strings.Contains(webircTags, " ") {
-			webircTags = ":" + webircTags
-		}
-
-		clientHostname := client.RemoteHostname
-		if c.Gateway.Config.ClientHostname != "" {
-			clientHostname = makeClientReplacements(c.Gateway.Config.ClientHostname, client)
-		}
-
-		remoteAddr := client.RemoteAddr
-		// Prefix IPv6 addresses that start with a : so they can be sent as an individual IRC
-		//  parameter. eg. ::1 would not parse correctly as a parameter, while 0::1 will
-		if strings.HasPrefix(remoteAddr, ":") {
-			remoteAddr = "0" + remoteAddr
-		}
-
-		webircLine := fmt.Sprintf(
-			"WEBIRC %s %s %s %s %s\n",
-			upstreamConfig.WebircPassword,
-			gatewayName,
-			clientHostname,
-			remoteAddr,
-			webircTags,
-		)
-		client.Log(1, "->upstream: %s", webircLine)
-		upstream.Write([]byte(webircLine))
-	} else {
-		client.Log(1, "No webirc to send")
+	if c.UpstreamConfig.WebircPassword == "" {
+		c.Log(1, "No webirc to send")
+		return
 	}
 
-	client.SendClientSignal("state", "connected")
+	gatewayName := "webircgateway"
+	if c.Gateway.Config.GatewayName != "" {
+		gatewayName = c.Gateway.Config.GatewayName
+	}
+	if c.UpstreamConfig.GatewayName != "" {
+		gatewayName = c.UpstreamConfig.GatewayName
+	}
+
+	webircTags := c.buildWebircTags()
+	if strings.Contains(webircTags, " ") {
+		webircTags = ":" + webircTags
+	}
+
+	clientHostname := c.RemoteHostname
+	if c.Gateway.Config.ClientHostname != "" {
+		clientHostname = makeClientReplacements(c.Gateway.Config.ClientHostname, c)
+	}
+
+	remoteAddr := c.RemoteAddr
+	// Prefix IPv6 addresses that start with a : so they can be sent as an individual IRC
+	//  parameter. eg. ::1 would not parse correctly as a parameter, while 0::1 will
+	if strings.HasPrefix(remoteAddr, ":") {
+		remoteAddr = "0" + remoteAddr
+	}
+
+	webircLine := fmt.Sprintf(
+		"WEBIRC %s %s %s %s %s\n",
+		c.UpstreamConfig.WebircPassword,
+		gatewayName,
+		clientHostname,
+		remoteAddr,
+		webircTags,
+	)
+	c.Log(1, "->upstream: %s", webircLine)
+	upstream.Write([]byte(webircLine))
+}
+
+func (c *Client) proxyData(upstream ConnInterface) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
 
 	// Data from client to upstream
 	go func() {
@@ -386,7 +413,7 @@ func (c *Client) connectUpstream() {
 
 			hook := &HookIrcLine{
 				Client:         client,
-				UpstreamConfig: &upstreamConfig,
+				UpstreamConfig: upstreamConfig,
 				Line:           data,
 				ToServer:       true,
 			}
@@ -394,6 +421,9 @@ func (c *Client) connectUpstream() {
 			if hook.Halt {
 				continue
 			}
+
+			// Plugins may have modified the data
+			data = hook.Line
 
 			client.Log(1, "->upstream: %s", data)
 			data = utf8ToOther(data, client.Encoding)
@@ -430,7 +460,7 @@ func (c *Client) connectUpstream() {
 
 			hook := &HookIrcLine{
 				Client:         client,
-				UpstreamConfig: &upstreamConfig,
+				UpstreamConfig: upstreamConfig,
 				Line:           data,
 				ToServer:       false,
 			}
@@ -438,6 +468,9 @@ func (c *Client) connectUpstream() {
 			if hook.Halt {
 				continue
 			}
+
+			// Plugins may have modified the data
+			data = hook.Line
 
 			if data == "" {
 				continue
@@ -451,108 +484,9 @@ func (c *Client) connectUpstream() {
 				continue
 			}
 
-			m, _ := irc.ParseLine(data)
-			pLen := 0
-			if m != nil {
-				pLen = len(m.Params)
-			}
-
-			if pLen > 0 && m.Command == "NICK" && m.Prefix.Nick == c.IrcState.Nick {
-				client.IrcState.Nick = m.Params[0]
-			}
-			if pLen > 0 && m.Command == "001" {
-				client.IrcState.Nick = m.Params[0]
-				client.State = ClientStateConnected
-			}
-			if pLen > 0 && m.Command == "005" {
-				// If EXTJWT is supported by the IRC server, disable it here
-				foundExtJwt := false
-				for _, param := range m.Params {
-					if strings.HasPrefix(param, "EXTJWT") {
-						foundExtJwt = true
-					}
-				}
-
-				if foundExtJwt {
-					c.Features.ExtJwt = false
-				}
-			}
-			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
-				channel := irc.NewStateChannel(m.GetParam(0, ""))
-				c.IrcState.SetChannel(channel)
-			}
-			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.RemoveChannel(m.GetParam(0, ""))
-			}
-			if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.ClearChannels()
-			}
-			// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
-			if pLen > 0 && m.Command == "MODE" {
-				if strings.HasPrefix(m.GetParam(0, ""), "#") {
-					channelName := m.GetParam(0, "")
-					modes := m.GetParam(1, "")
-
-					channel := c.IrcState.GetChannel(channelName)
-					if channel != nil {
-						channel = irc.NewStateChannel(channelName)
-						c.IrcState.SetChannel(channel)
-					}
-
-					adding := false
-					paramIdx := 1
-					for i := 0; i < len(modes); i++ {
-						mode := string(modes[i])
-
-						if mode == "+" {
-							adding = true
-						} else if mode == "-" {
-							adding = false
-						} else {
-							paramIdx++
-							param := m.GetParam(paramIdx, "")
-							if strings.ToLower(param) == strings.ToLower(c.IrcState.Nick) {
-								if adding {
-									channel.Modes[mode] = ""
-								} else {
-									delete(channel.Modes, mode)
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
-			// this client
-			if pLen >= 3 &&
-				strings.ToUpper(m.Command) == "CAP" &&
-				strings.ToUpper(m.Params[1]) == "LS" {
-				// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
-				caps := ""
-				if pLen >= 4 && m.Params[2] == "*" {
-					caps = strings.ToUpper(m.Params[3])
-				} else {
-					caps = strings.ToUpper(m.Params[2])
-				}
-
-				if strings.Contains(caps, "DRAFT/MESSAGE-TAGS-0.2") {
-					c.Log(1, "Upstream already supports Messagetags, disabling feature")
-					c.Features.Messagetags = false
-				}
-			}
-
-			if m != nil && client.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(m) {
-				// If we have any message tags stored for this message from a previous PRIVMSG sent
-				// by a client, add them back in
-				mTags, mTagsExists := c.Gateway.messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
-				if mTagsExists {
-					for k, v := range mTags.Tags {
-						m.Tags[k] = v
-					}
-
-					data = m.ToLine()
-				}
+			data = client.ProcessLineFromUpstream(data)
+			if data == "" {
+				return
 			}
 
 			client.SendClientSignal("data", data)
@@ -644,6 +578,118 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
 
 	return upstreamConfig
+}
+
+// ProcessLineFromUpstream - Processes and makes any changes to a line of data sent from an upstream
+func (c *Client) ProcessLineFromUpstream(data string) string {
+	client := c
+
+	m, _ := irc.ParseLine(data)
+	if m == nil {
+		return data
+	}
+
+	pLen := len(m.Params)
+
+	if pLen > 0 && m.Command == "NICK" && m.Prefix.Nick == c.IrcState.Nick {
+		client.IrcState.Nick = m.Params[0]
+	}
+	if pLen > 0 && m.Command == "001" {
+		client.IrcState.Nick = m.Params[0]
+		client.State = ClientStateConnected
+	}
+	if pLen > 0 && m.Command == "005" {
+		// If EXTJWT is supported by the IRC server, disable it here
+		foundExtJwt := false
+		for _, param := range m.Params {
+			if strings.HasPrefix(param, "EXTJWT") {
+				foundExtJwt = true
+			}
+		}
+
+		if foundExtJwt {
+			c.Features.ExtJwt = false
+		}
+	}
+	if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
+		channel := irc.NewStateChannel(m.GetParam(0, ""))
+		c.IrcState.SetChannel(channel)
+	}
+	if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
+		c.IrcState.RemoveChannel(m.GetParam(0, ""))
+	}
+	if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
+		c.IrcState.ClearChannels()
+	}
+	// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
+	if pLen > 0 && m.Command == "MODE" {
+		if strings.HasPrefix(m.GetParam(0, ""), "#") {
+			channelName := m.GetParam(0, "")
+			modes := m.GetParam(1, "")
+
+			channel := c.IrcState.GetChannel(channelName)
+			if channel != nil {
+				channel = irc.NewStateChannel(channelName)
+				c.IrcState.SetChannel(channel)
+			}
+
+			adding := false
+			paramIdx := 1
+			for i := 0; i < len(modes); i++ {
+				mode := string(modes[i])
+
+				if mode == "+" {
+					adding = true
+				} else if mode == "-" {
+					adding = false
+				} else {
+					paramIdx++
+					param := m.GetParam(paramIdx, "")
+					if strings.ToLower(param) == strings.ToLower(c.IrcState.Nick) {
+						if adding {
+							channel.Modes[mode] = ""
+						} else {
+							delete(channel.Modes, mode)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
+	// this client
+	if pLen >= 3 &&
+		strings.ToUpper(m.Command) == "CAP" &&
+		strings.ToUpper(m.Params[1]) == "LS" {
+		// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
+		caps := ""
+		if pLen >= 4 && m.Params[2] == "*" {
+			caps = strings.ToUpper(m.Params[3])
+		} else {
+			caps = strings.ToUpper(m.Params[2])
+		}
+
+		if strings.Contains(caps, "DRAFT/MESSAGE-TAGS-0.2") {
+			c.Log(1, "Upstream already supports Messagetags, disabling feature")
+			c.Features.Messagetags = false
+		}
+	}
+
+	if m != nil && client.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(m) {
+		// If we have any message tags stored for this message from a previous PRIVMSG sent
+		// by a client, add them back in
+		mTags, mTagsExists := c.Gateway.messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
+		if mTagsExists {
+			for k, v := range mTags.Tags {
+				m.Tags[k] = v
+			}
+
+			data = m.ToLine()
+		}
+	}
+
+	return data
 }
 
 // ProcesIncomingLine - Processes and makes any changes to a line of data sent from a client
