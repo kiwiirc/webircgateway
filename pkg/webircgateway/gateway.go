@@ -1,7 +1,6 @@
 package webircgateway
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -10,13 +9,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"errors"
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
-	cmap "github.com/orcaman/concurrent-map"
-	"golang.org/x/crypto/acme/autocert"
+	"github.com/orcaman/concurrent-map"
 )
 
 type Server struct {
@@ -26,22 +23,25 @@ type Server struct {
 	messageTags *MessageTagManager
 	identdServ  identd.Server
 	Clients     cmap.ConcurrentMap
+	Acme        *LEManager
 }
 
 func NewServer() *Server {
 	s := &Server{}
+	s.Config = NewConfig(s)
 	s.HttpRouter = http.NewServeMux()
 	s.LogOutput = make(chan string, 5)
 	s.identdServ = identd.NewIdentdServer()
 	s.messageTags = NewMessageTagManager()
 	// Clients hold a map lookup for all the connected clients
 	s.Clients = cmap.New()
+	s.Acme = NewLetsEncryptManager(s)
 
 	return s
 }
 
 func (s *Server) Log(level int, format string, args ...interface{}) {
-	if level < Config.LogLevel {
+	if level < s.Config.LogLevel {
 		return
 	}
 
@@ -58,14 +58,14 @@ func (s *Server) Start() {
 	s.initHttpRoutes()
 	s.maybeStartIdentd()
 
-	for _, server := range Config.Servers {
-		go startServer(server)
+	for _, serverConfig := range s.Config.Servers {
+		go s.startServer(serverConfig)
 	}
 }
 
 func (s *Server) maybeStartStaticFileServer() {
-	if Config.Webroot != "" {
-		webroot := ConfigResolvePath(Config.Webroot)
+	if s.Config.Webroot != "" {
+		webroot := s.Config.ResolvePath(s.Config.Webroot)
 		s.Log(2, "Serving files from %s", webroot)
 		s.HttpRouter.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
@@ -74,16 +74,19 @@ func (s *Server) maybeStartStaticFileServer() {
 func (s *Server) initHttpRoutes() error {
 	// Add all the transport routes
 	engineConfigured := false
-	for _, serverEngine := range Config.ServerEngines {
+	for _, serverEngine := range s.Config.ServerEngines {
 		switch serverEngine {
 		case "kiwiirc":
-			kiwiircHTTPHandler(s.HttpRouter)
+			t := &TransportKiwiirc{}
+			t.Init(s)
 			engineConfigured = true
 		case "websocket":
-			websocketHTTPHandler(s.HttpRouter)
+			t := &TransportWebsocket{}
+			t.Init(s)
 			engineConfigured = true
 		case "sockjs":
-			sockjsHTTPHandler(s.HttpRouter)
+			t := &TransportSockjs{}
+			t.Init(s)
 			engineConfigured = true
 		default:
 			s.Log(3, "Invalid server engine: '%s'", serverEngine)
@@ -106,13 +109,13 @@ func (s *Server) initHttpRoutes() error {
 	})
 
 	s.HttpRouter.HandleFunc("/webirc/_status", func(w http.ResponseWriter, r *http.Request) {
-		if GetRemoteAddressFromRequest(r).String() != "127.0.0.1" {
+		if s.GetRemoteAddressFromRequest(r).String() != "127.0.0.1" {
 			w.WriteHeader(403)
 			return
 		}
 
 		out := ""
-		for item := range Clients.Iter() {
+		for item := range s.Clients.Iter() {
 			c := item.Val.(*Client)
 			out += fmt.Sprintf(
 				"%s %s %s %s!%s\n",
@@ -131,7 +134,7 @@ func (s *Server) initHttpRoutes() error {
 }
 
 func (s *Server) maybeStartIdentd() {
-	if Config.Identd {
+	if s.Config.Identd {
 		err := s.identdServ.Run()
 		if err != nil {
 			s.Log(3, "Error starting identd server: %s", err.Error())
@@ -145,15 +148,17 @@ func (s *Server) startServer(conf ConfigServer) {
 	addr := fmt.Sprintf("%s:%d", conf.LocalAddr, conf.Port)
 
 	if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "tcp:") {
-		tcpStartHandler(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
+		t := &TransportTcp{}
+		t.Init(s)
+		t.Start(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
 	} else if conf.TLS && conf.LetsEncryptCacheDir == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
 			s.Log(3, "'cert' and 'key' options must be set for TLS servers")
 			return
 		}
 
-		tlsCert := ConfigResolvePath(conf.CertFile)
-		tlsKey := ConfigResolvePath(conf.KeyFile)
+		tlsCert := s.Config.ResolvePath(conf.CertFile)
+		tlsKey := s.Config.ResolvePath(conf.KeyFile)
 
 		s.Log(2, "Listening with TLS on %s", addr)
 		keyPair, keyPairErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
@@ -166,7 +171,7 @@ func (s *Server) startServer(conf ConfigServer) {
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{keyPair},
 			},
-			Handler: HttpRouter,
+			Handler: s.HttpRouter,
 		}
 
 		// Don't use HTTP2 since it doesn't support websockets
@@ -178,13 +183,13 @@ func (s *Server) startServer(conf ConfigServer) {
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
 		s.Log(2, "Listening with letsencrypt TLS on %s", addr)
-		leManager := getLEManager(conf.LetsEncryptCacheDir)
+		leManager := s.Acme.Get(conf.LetsEncryptCacheDir)
 		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
 				GetCertificate: leManager.GetCertificate,
 			},
-			Handler: HttpRouter,
+			Handler: s.HttpRouter,
 		}
 
 		// Don't use HTTP2 since it doesn't support websockets
@@ -202,10 +207,10 @@ func (s *Server) startServer(conf ConfigServer) {
 			return
 		}
 		os.Chmod(socketFile, conf.BindMode)
-		http.Serve(server, HttpRouter)
+		http.Serve(server, s.HttpRouter)
 	} else {
 		s.Log(2, "Listening on %s", addr)
-		err := http.ListenAndServe(addr, HttpRouter)
+		err := http.ListenAndServe(addr, s.HttpRouter)
 		s.Log(3, err.Error())
 	}
 }
@@ -218,28 +223,4 @@ var (
 	//LogOutput   chan string
 	//messageTags *MessageTagManager
 
-	// ensure only one instance of the manager and handler is running
-	// while allowing multiple listeners to use it
-	letsencryptMutex   sync.Mutex
-	letsencryptManager *autocert.Manager
 )
-
-func getLEManager(certCacheDir string) *autocert.Manager {
-	letsencryptMutex.Lock()
-	defer letsencryptMutex.Unlock()
-
-	// Create it if it doesn't already exist
-	if letsencryptManager == nil {
-		letsencryptManager = &autocert.Manager{
-			Prompt: autocert.AcceptTOS,
-			Cache:  autocert.DirCache(strings.TrimRight(certCacheDir, "/")),
-			HostPolicy: func(ctx context.Context, host string) error {
-				s.Log(2, "Automatically requesting a HTTPS certificate for %s", host)
-				return nil
-			},
-		}
-		HttpRouter.Handle("/.well-known/", letsencryptManager.HTTPHandler(HttpRouter))
-	}
-
-	return letsencryptManager
-}

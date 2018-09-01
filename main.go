@@ -42,20 +42,20 @@ func runProxy() {
 }
 
 func runGateway(configFile string) {
-	// Print any webircgateway logout to STDOUT
-	go printLogOutput()
-
-	// Listen for process signals
-	go watchForSignals()
-
 	gateway := webircgateway.NewServer()
 
+	// Print any webircgateway logout to STDOUT
+	go printLogOutput(gateway)
+
+	// Listen for process signals
+	go watchForSignals(gateway)
+
 	gateway.Config.SetConfigFile(configFile)
-	log.Printf("Using config %s", webircgateway.CurrentConfigFile())
+	log.Printf("Using config %s", gateway.Config.CurrentConfigFile())
 
 	configErr := gateway.Config.Load()
-	if err != nil {
-		log.Printf("Config file error: %s", err.Error())
+	if configErr != nil {
+		log.Printf("Config file error: %s", configErr.Error())
 		os.Exit(1)
 	}
 

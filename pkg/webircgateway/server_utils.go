@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+func (s *Server) NewClient() *Client {
+	return NewClient(s)
+}
 func (s *Server) isClientOriginAllowed(originHeader string) bool {
 	// Empty list of origins = all origins allowed
 	if len(s.Config.RemoteOrigins) == 0 {
@@ -33,13 +36,13 @@ func (s *Server) isClientOriginAllowed(originHeader string) bool {
 
 func (s *Server) isIrcAddressAllowed(addr string) bool {
 	// Empty whitelist = all destinations allowed
-	if len(Config.GatewayWhitelist) == 0 {
+	if len(s.Config.GatewayWhitelist) == 0 {
 		return true
 	}
 
 	foundMatch := false
 
-	for _, addrMatch := range Config.GatewayWhitelist {
+	for _, addrMatch := range s.Config.GatewayWhitelist {
 		if addrMatch.Match(addr) {
 			foundMatch = true
 			break

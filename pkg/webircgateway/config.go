@@ -48,6 +48,7 @@ type ConfigProxy struct {
 
 // Config - Config options for the running app
 type Config struct {
+	gateway               *Server
 	ConfigFile            string
 	LogLevel              int
 	Gateway               bool
@@ -70,6 +71,10 @@ type Config struct {
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
+}
+
+func NewConfig(gateway *Server) *Config {
+	return &Config{gateway: gateway}
 }
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
@@ -138,16 +143,16 @@ func (c *Config) Load() error {
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
 			c.LogLevel = section.Key("logLevel").MustInt(3)
-			if Config.LogLevel < 1 || Config.LogLevel > 3 {
-				logOut(3, "Config option logLevel must be between 1-3. Setting default value of 3.")
+			if c.LogLevel < 1 || c.LogLevel > 3 {
+				c.gateway.Log(3, "Config option logLevel must be between 1-3. Setting default value of 3.")
 				c.LogLevel = 3
 			}
 
 			c.Identd = section.Key("identd").MustBool(false)
 
 			c.GatewayName = section.Key("gateway_name").MustString("")
-			if strings.Contains(Config.GatewayName, " ") {
-				logOut(3, "Config option gateway_name must not contain spaces")
+			if strings.Contains(c.GatewayName, " ") {
+				c.gateway.Log(3, "Config option gateway_name must not contain spaces")
 				c.GatewayName = ""
 			}
 
@@ -158,8 +163,8 @@ func (c *Config) Load() error {
 			captchaSecret := section.Key("recaptcha_secret").MustString("")
 			captchaKey := section.Key("recaptcha_key").MustString("")
 			if captchaSecret != "" && captchaKey != "" {
-				Config.RequiresVerification = true
-				Config.ReCaptchaSecret = captchaSecret
+				c.RequiresVerification = true
+				c.ReCaptchaSecret = captchaSecret
 			}
 		}
 
@@ -229,7 +234,7 @@ func (c *Config) Load() error {
 
 			upstream.GatewayName = section.Key("gateway_name").MustString("")
 			if strings.Contains(upstream.GatewayName, " ") {
-				logOut(3, "Config option gateway_name must not contain spaces")
+				c.gateway.Log(3, "Config option gateway_name must not contain spaces")
 				upstream.GatewayName = ""
 			}
 
@@ -238,7 +243,7 @@ func (c *Config) Load() error {
 
 		if strings.Index(section.Name(), "engines") == 0 {
 			for _, engine := range section.KeyStrings() {
-				Config.ServerEngines = append(Config.ServerEngines, strings.Trim(engine, "\n"))
+				c.ServerEngines = append(c.ServerEngines, strings.Trim(engine, "\n"))
 			}
 		}
 
@@ -246,7 +251,7 @@ func (c *Config) Load() error {
 			for _, origin := range section.KeyStrings() {
 				match, err := glob.Compile(origin)
 				if err != nil {
-					logOut(3, "Config section allowed_origins has invalid match, "+origin)
+					c.gateway.Log(3, "Config section allowed_origins has invalid match, "+origin)
 					continue
 				}
 				c.RemoteOrigins = append(c.RemoteOrigins, match)
@@ -257,7 +262,7 @@ func (c *Config) Load() error {
 			for _, origin := range section.KeyStrings() {
 				match, err := glob.Compile(origin)
 				if err != nil {
-					logOut(3, "Config section gateway.whitelist has invalid match, "+origin)
+					c.gateway.Log(3, "Config section gateway.whitelist has invalid match, "+origin)
 					continue
 				}
 				c.GatewayWhitelist = append(c.GatewayWhitelist, match)
@@ -268,7 +273,7 @@ func (c *Config) Load() error {
 			for _, cidrRange := range section.KeyStrings() {
 				_, validRange, cidrErr := net.ParseCIDR(cidrRange)
 				if cidrErr != nil {
-					logOut(3, "Config section reverse_proxies has invalid entry, "+cidrRange)
+					c.gateway.Log(3, "Config section reverse_proxies has invalid entry, "+cidrRange)
 					continue
 				}
 				c.ReverseProxies = append(c.ReverseProxies, *validRange)

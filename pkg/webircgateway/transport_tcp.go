@@ -1,29 +1,46 @@
 package webircgateway
 
 import (
+	"fmt"
 	"net"
-	"net/http"
+	"os"
 	"strings"
 	"sync"
-
-	"golang.org/x/net/websocket"
 )
 
-func websocketHTTPHandler(router *http.ServeMux) {
-	router.Handle("/webirc/websocket/", websocket.Handler(websocketHandler))
+type TransportTcp struct {
+	gateway *Server
 }
 
-func websocketHandler(ws *websocket.Conn) {
-	client := NewClient()
+func (t *TransportTcp) Init(g *Server) {
+	t.gateway = g
+}
 
-	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
-	if !isClientOriginAllowed(originHeader) {
-		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
-		ws.Close()
-		return
+func (t *TransportTcp) Start(lAddr string) {
+	l, err := net.Listen("tcp", lAddr)
+	if err != nil {
+		fmt.Println("Error listening:", err.Error())
+		os.Exit(1)
 	}
+	// Close the listener when the application closes.
+	defer l.Close()
+	fmt.Println("TCP listening on " + lAddr)
+	for {
+		// Listen for an incoming connection.
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting: ", err.Error())
+			os.Exit(1)
+		}
+		// Handle connections in a new goroutine.
+		go t.handleConn(conn)
+	}
+}
 
-	client.RemoteAddr = GetRemoteAddressFromRequest(ws.Request()).String()
+func (t *TransportTcp) handleConn(conn net.Conn) {
+	client := t.gateway.NewClient()
+
+	client.RemoteAddr = conn.RemoteAddr().String()
 
 	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
 	if err != nil {
@@ -41,11 +58,7 @@ func websocketHandler(ws *websocket.Conn) {
 		}
 	}
 
-	if isRequestSecure(ws.Request()) {
-		client.Tags["secure"] = ""
-	}
-
-	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
+	_, remoteAddrPort, _ := net.SplitHostPort(conn.RemoteAddr().String())
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
@@ -54,13 +67,14 @@ func websocketHandler(ws *websocket.Conn) {
 	var sendDrained sync.WaitGroup
 	sendDrained.Add(1)
 
-	// Read from websocket
+	// Read from TCP
 	go func() {
 		for {
 			r := make([]byte, 1024)
-			len, err := ws.Read(r)
+			len, err := conn.Read(r)
 			if err == nil && len > 0 {
 				message := string(r[:len])
+				message = strings.TrimRight(message, "\r\n")
 				client.Log(1, "client->: %s", message)
 				select {
 				case client.Recv <- message:
@@ -70,11 +84,11 @@ func websocketHandler(ws *websocket.Conn) {
 				}
 
 			} else if err != nil {
-				client.Log(1, "Websocket connection closed (%s)", err.Error())
+				client.Log(1, "TCP connection closed (%s)", err.Error())
 				break
 
 			} else if len == 0 {
-				client.Log(1, "Got 0 bytes from websocket")
+				client.Log(1, "Got 0 bytes from TCP")
 			}
 		}
 
@@ -91,12 +105,13 @@ func websocketHandler(ws *websocket.Conn) {
 		}
 
 		if signal[0] == "data" {
-			line := strings.Trim(signal[1], "\r\n")
-			client.Log(1, "->ws: %s", line)
-			ws.Write([]byte(line))
+			//line := strings.Trim(signal[1], "\r\n")
+			line := signal[1] + "\n"
+			client.Log(1, "->tcp: %s", line)
+			conn.Write([]byte(line))
 		}
 	}
 
 	sendDrained.Wait()
-	ws.Close()
+	conn.Close()
 }
