@@ -105,7 +105,7 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 		if signal[0] == "data" {
 			//line := strings.Trim(signal[1], "\r\n")
 			line := signal[1] + "\n"
-			client.Log(1, "->tcp: %s", line)
+			client.Log(1, "->tcp: %s", signal[1])
 			conn.Write([]byte(line))
 		}
 	}
