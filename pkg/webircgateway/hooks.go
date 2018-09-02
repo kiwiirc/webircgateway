@@ -1,5 +1,7 @@
 package webircgateway
 
+import "github.com/kiwiirc/webircgateway/pkg/irc"
+
 var hooksRegistered map[string][]interface{}
 
 func init() {
@@ -61,6 +63,7 @@ type HookIrcLine struct {
 	Client         *Client
 	UpstreamConfig *ConfigUpstream
 	Line           string
+	Message        *irc.Message
 	ToServer       bool
 }
 

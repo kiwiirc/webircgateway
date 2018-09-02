@@ -410,10 +410,13 @@ func (c *Client) proxyData(upstream ConnInterface) {
 				)
 			}
 
+			message, _ := irc.ParseLine(data)
+
 			hook := &HookIrcLine{
 				Client:         client,
 				UpstreamConfig: upstreamConfig,
 				Line:           data,
+				Message:        message,
 				ToServer:       true,
 			}
 			hook.Dispatch("irc.line")
@@ -456,11 +459,13 @@ func (c *Client) proxyData(upstream ConnInterface) {
 			}
 
 			data = strings.Trim(data, "\n\r")
+			message, _ := irc.ParseLine(data)
 
 			hook := &HookIrcLine{
 				Client:         client,
 				UpstreamConfig: upstreamConfig,
 				Line:           data,
+				Message:        message,
 				ToServer:       false,
 			}
 			hook.Dispatch("irc.line")

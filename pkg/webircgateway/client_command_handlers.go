@@ -302,7 +302,6 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		return "", nil
 	}
 
-	println(c.Features.ExtJwt, strings.ToUpper(message.Command))
 	if c.Features.ExtJwt && strings.ToUpper(message.Command) == "EXTJWT" {
 		tokenFor := message.GetParam(0, "")
 
