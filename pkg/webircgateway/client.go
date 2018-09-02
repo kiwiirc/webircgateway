@@ -112,7 +112,19 @@ func NewClient(gateway *Gateway) *Client {
 		time.Sleep(time.Second * 3)
 		c.EndWG.Wait()
 		gateway.Clients.Remove(string(c.Id))
+
+		hook := &HookClientState{
+			Client:         c,
+			Connected:       false,
+		}
+		hook.Dispatch("client.state")
 	}()
+
+	hook := &HookClientState{
+		Client:         c,
+		Connected:       true,
+	}
+	hook.Dispatch("client.state")
 
 	return c
 }

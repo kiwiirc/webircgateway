@@ -37,6 +37,7 @@ func (h *Hook) getCallbacks(eventType string) []interface{} {
 /**
  * HookIrcConnectionPre
  * Dispatched just before an IRC connection is attempted
+ * Types: irc.connection.pre
  */
 type HookIrcConnectionPre struct {
 	Hook
@@ -57,6 +58,7 @@ func (h *HookIrcConnectionPre) Dispatch(eventType string) {
  * Dispatched when either:
  *   * A line arrives from the IRCd, before sending to the client
  *   * A line arrives from the client, before sending to the IRCd
+ * Types: irc.line
  */
 type HookIrcLine struct {
 	Hook
@@ -70,6 +72,25 @@ type HookIrcLine struct {
 func (h *HookIrcLine) Dispatch(eventType string) {
 	for _, p := range h.getCallbacks(eventType) {
 		if f, ok := p.(func(*HookIrcLine)); ok {
+			f(h)
+		}
+	}
+}
+
+/**
+ * HookClientState
+ * Dispatched after a client connects or disconnects
+ * Types: client.state
+ */
+ type HookClientState struct {
+	Hook
+	Client         *Client
+	Connected bool
+}
+
+func (h *HookClientState) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookClientState)); ok {
 			f(h)
 		}
 	}
