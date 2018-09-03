@@ -5,5 +5,5 @@ import (
 )
 
 func Start(gateway *webircgateway.Gateway) {
-	gateway.Log(1, "Example gateway plugin", webircgateway.Version)
+	gateway.Log(1, "Example gateway plugin %s", webircgateway.Version)
 }
