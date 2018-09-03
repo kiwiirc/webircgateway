@@ -104,25 +104,27 @@ func NewClient(gateway *Gateway) *Client {
 
 	go c.clientLineWorker()
 
+	// This Add(1) will be ended once the client starts shutting down in StartShutdown()
+	c.EndWG.Add(1)
+
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
 	gateway.Clients.Set(string(c.Id), c)
 	go func() {
-		time.Sleep(time.Second * 3)
 		c.EndWG.Wait()
 		gateway.Clients.Remove(string(c.Id))
 
 		hook := &HookClientState{
-			Client:         c,
-			Connected:       false,
+			Client:    c,
+			Connected: false,
 		}
 		hook.Dispatch("client.state")
 	}()
 
 	hook := &HookClientState{
-		Client:         c,
-		Connected:       true,
+		Client:    c,
+		Connected: true,
 	}
 	hook.Dispatch("client.state")
 
@@ -163,6 +165,7 @@ func (c *Client) StartShutdown(reason string) {
 		}
 
 		close(c.Signals)
+		c.EndWG.Done()
 	}
 }
 
