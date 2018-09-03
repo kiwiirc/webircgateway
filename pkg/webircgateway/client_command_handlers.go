@@ -1,15 +1,15 @@
 package webircgateway
 
 import (
-	"strings"
-	"strconv"
-	"time"
 	"errors"
+	"strconv"
+	"strings"
+	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
 	"golang.org/x/net/html/charset"
-	"github.com/kiwiirc/webircgateway/pkg/irc"
 )
 
 /*
@@ -138,8 +138,6 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	if err != nil {
 		return line, nil
 	}
-
-	println("message>", message.Command)
 
 	maybeConnectUpstream := func() {
 		if !c.UpstreamStarted && c.IrcState.Username != "" && c.Verified {
