@@ -82,9 +82,9 @@ func (h *HookIrcLine) Dispatch(eventType string) {
  * Dispatched after a client connects or disconnects
  * Types: client.state
  */
- type HookClientState struct {
+type HookClientState struct {
 	Hook
-	Client         *Client
+	Client    *Client
 	Connected bool
 }
 

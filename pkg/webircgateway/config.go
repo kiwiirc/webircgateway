@@ -71,7 +71,7 @@ type Config struct {
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
-	Plugins []string
+	Plugins               []string
 }
 
 func NewConfig(gateway *Gateway) *Config {

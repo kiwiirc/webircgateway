@@ -1,9 +1,10 @@
 package webircgateway
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 	"unicode/utf8"
+
 	"golang.org/x/net/html/charset"
 )
 
