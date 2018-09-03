@@ -2,9 +2,7 @@ package webircgateway
 
 import (
 	"bufio"
-	"fmt"
 	"net"
-	"os"
 	"strings"
 	"sync"
 )
@@ -20,18 +18,18 @@ func (t *TransportTcp) Init(g *Gateway) {
 func (t *TransportTcp) Start(lAddr string) {
 	l, err := net.Listen("tcp", lAddr)
 	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
+		t.gateway.Log(3, "TCP error listening: "+err.Error())
+		return
 	}
 	// Close the listener when the application closes.
 	defer l.Close()
-	fmt.Println("TCP listening on " + lAddr)
+	t.gateway.Log(2, "TCP listening on "+lAddr)
 	for {
 		// Listen for an incoming connection.
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
+			t.gateway.Log(3, "TCP error accepting: "+err.Error())
+			break
 		}
 		// Handle connections in a new goroutine.
 		go t.handleConn(conn)
