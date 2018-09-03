@@ -59,7 +59,7 @@ type Config struct {
 	GatewayWebircPassword map[string]string
 	Upstreams             []ConfigUpstream
 	Servers               []ConfigServer
-	ServerEngines         []string
+	ServerTransports      []string
 	RemoteOrigins         []glob.Glob
 	ReverseProxies        []net.IPNet
 	Webroot               string
@@ -128,7 +128,7 @@ func (c *Config) Load() error {
 	c.GatewayWebircPassword = make(map[string]string)
 	c.Upstreams = []ConfigUpstream{}
 	c.Servers = []ConfigServer{}
-	c.ServerEngines = []string{}
+	c.ServerTransports = []string{}
 	c.RemoteOrigins = []glob.Glob{}
 	c.GatewayWhitelist = []glob.Glob{}
 	c.ReverseProxies = []net.IPNet{}
@@ -242,9 +242,10 @@ func (c *Config) Load() error {
 			c.Upstreams = append(c.Upstreams, upstream)
 		}
 
-		if strings.Index(section.Name(), "engines") == 0 {
-			for _, engine := range section.KeyStrings() {
-				c.ServerEngines = append(c.ServerEngines, strings.Trim(engine, "\n"))
+		// "engines" is now legacy naming
+		if section.Name() == "engines" || section.Name() == "transports" {
+			for _, transport := range section.KeyStrings() {
+				c.ServerTransports = append(c.ServerTransports, strings.Trim(transport, "\n"))
 			}
 		}
 

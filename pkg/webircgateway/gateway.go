@@ -78,8 +78,8 @@ func (s *Gateway) maybeStartStaticFileServer() {
 func (s *Gateway) initHttpRoutes() error {
 	// Add all the transport routes
 	engineConfigured := false
-	for _, serverEngine := range s.Config.ServerEngines {
-		switch serverEngine {
+	for _, transport := range s.Config.ServerTransports {
+		switch transport {
 		case "kiwiirc":
 			t := &TransportKiwiirc{}
 			t.Init(s)
@@ -93,7 +93,7 @@ func (s *Gateway) initHttpRoutes() error {
 			t.Init(s)
 			engineConfigured = true
 		default:
-			s.Log(3, "Invalid server engine: '%s'", serverEngine)
+			s.Log(3, "Invalid server engine: '%s'", transport)
 		}
 	}
 
