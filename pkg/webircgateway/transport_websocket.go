@@ -2,28 +2,32 @@ package webircgateway
 
 import (
 	"net"
-	"net/http"
 	"strings"
+	"sync"
 
-	"github.com/igm/sockjs-go/sockjs"
+	"golang.org/x/net/websocket"
 )
 
-func sockjsHTTPHandler(router *http.ServeMux) {
-	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, sockjsHandler)
-	router.Handle("/webirc/sockjs/", sockjsHandler)
+type TransportWebsocket struct {
+	gateway *Gateway
 }
 
-func sockjsHandler(session sockjs.Session) {
-	client := NewClient()
+func (t *TransportWebsocket) Init(g *Gateway) {
+	t.gateway = g
+	t.gateway.HttpRouter.Handle("/webirc/websocket/", websocket.Handler(t.websocketHandler))
+}
 
-	originHeader := strings.ToLower(session.Request().Header.Get("Origin"))
-	if !isClientOriginAllowed(originHeader) {
+func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
+	client := t.gateway.NewClient()
+
+	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
+	if !t.gateway.isClientOriginAllowed(originHeader) {
 		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
-		session.Close(0, "Origin not allowed")
+		ws.Close()
 		return
 	}
 
-	client.RemoteAddr = GetRemoteAddressFromRequest(session.Request()).String()
+	client.RemoteAddr = t.gateway.GetRemoteAddressFromRequest(ws.Request()).String()
 
 	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
 	if err != nil {
@@ -41,33 +45,39 @@ func sockjsHandler(session sockjs.Session) {
 		}
 	}
 
-	if isRequestSecure(session.Request()) {
+	if t.gateway.isRequestSecure(ws.Request()) {
 		client.Tags["secure"] = ""
 	}
 
-	// This doesn't make sense to have since the remote port may change between requests. Only
-	// here for testing purposes for now.
-	_, remoteAddrPort, _ := net.SplitHostPort(session.Request().RemoteAddr)
+	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
 
-	// Read from sockjs
+	// We wait until the client send queue has been drained
+	var sendDrained sync.WaitGroup
+	sendDrained.Add(1)
+
+	// Read from websocket
 	go func() {
 		for {
-			msg, err := session.Recv()
-			if err == nil && len(msg) > 0 {
-				client.Log(1, "client->: %s", msg)
+			r := make([]byte, 1024)
+			len, err := ws.Read(r)
+			if err == nil && len > 0 {
+				message := string(r[:len])
+				client.Log(1, "client->: %s", message)
 				select {
-				case client.Recv <- msg:
+				case client.Recv <- message:
 				default:
 					client.Log(3, "Recv queue full. Dropping data")
 					// TODO: Should this really just drop the data or close the connection?
 				}
+
 			} else if err != nil {
-				client.Log(1, "sockjs connection closed (%s)", err.Error())
+				client.Log(1, "Websocket connection closed (%s)", err.Error())
 				break
-			} else if len(msg) == 0 {
+
+			} else if len == 0 {
 				client.Log(1, "Got 0 bytes from websocket")
 			}
 		}
@@ -80,13 +90,17 @@ func sockjsHandler(session sockjs.Session) {
 	for {
 		signal, ok := <-client.Signals
 		if !ok {
+			sendDrained.Done()
 			break
 		}
 
 		if signal[0] == "data" {
 			line := strings.Trim(signal[1], "\r\n")
 			client.Log(1, "->ws: %s", line)
-			session.Send(line)
+			ws.Write([]byte(line))
 		}
 	}
+
+	sendDrained.Wait()
+	ws.Close()
 }

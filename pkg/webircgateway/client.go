@@ -6,23 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"sync"
 
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
-	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
-	"github.com/orcaman/concurrent-map"
-	"golang.org/x/net/html/charset"
 )
 
 const (
@@ -38,10 +31,20 @@ const (
 	ClientStateEnding = "ending"
 )
 
+// The upstream connection object may be either a TCP client or a KiwiProxy
+// instance. Create a common interface we can use that satisfies either
+// case.
+type ConnInterface interface {
+	io.Reader
+	io.Writer
+	Close() error
+}
+
 type ClientSignal [3]string
 
 // Client - Connecting client struct
 type Client struct {
+	Gateway          *Gateway
 	Id               int
 	State            string
 	EndWG            sync.WaitGroup
@@ -68,19 +71,19 @@ type Client struct {
 	Features struct {
 		Messagetags bool
 		Metadata    bool
+		ExtJwt      bool
 	}
 }
 
-// Clients hold a map lookup for all the connected clients
-var Clients = cmap.New()
 var nextClientID = 1
 
 // NewClient - Makes a new client
-func NewClient() *Client {
+func NewClient(gateway *Gateway) *Client {
 	thisID := nextClientID
 	nextClientID++
 
 	c := &Client{
+		Gateway:      gateway,
 		Id:           thisID,
 		State:        ClientStateIdle,
 		Recv:         make(chan string, 50),
@@ -91,22 +94,39 @@ func NewClient() *Client {
 		IrcState:     irc.NewState(),
 	}
 
+	// Auto enable some features by default. They may be disabled later on
+	c.Features.ExtJwt = true
+
 	// Auto verify the client if it's not needed
-	if !Config.RequiresVerification {
+	if !gateway.Config.RequiresVerification {
 		c.Verified = true
 	}
 
 	go c.clientLineWorker()
 
+	// This Add(1) will be ended once the client starts shutting down in StartShutdown()
+	c.EndWG.Add(1)
+
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
-	Clients.Set(string(c.Id), c)
+	gateway.Clients.Set(string(c.Id), c)
 	go func() {
-		time.Sleep(time.Second * 3)
 		c.EndWG.Wait()
-		Clients.Remove(string(c.Id))
+		gateway.Clients.Remove(string(c.Id))
+
+		hook := &HookClientState{
+			Client:    c,
+			Connected: false,
+		}
+		hook.Dispatch("client.state")
 	}()
+
+	hook := &HookClientState{
+		Client:    c,
+		Connected: true,
+	}
+	hook.Dispatch("client.state")
 
 	return c
 }
@@ -114,7 +134,7 @@ func NewClient() *Client {
 // Log - Log a line of text with context of this client
 func (c *Client) Log(level int, format string, args ...interface{}) {
 	prefix := fmt.Sprintf("client:%d ", c.Id)
-	logOut(level, prefix+format, args...)
+	c.Gateway.Log(level, prefix+format, args...)
 }
 
 func (c *Client) IsShuttingDown() bool {
@@ -145,6 +165,7 @@ func (c *Client) StartShutdown(reason string) {
 		}
 
 		close(c.Signals)
+		c.EndWG.Done()
 	}
 }
 
@@ -173,23 +194,12 @@ func (c *Client) connectUpstream() {
 
 	c.UpstreamStarted = true
 
-	// The upstream connection object may be either a TCP client or a KiwiProxy
-	// instance. Create a common interface we can use that satisfies either
-	// case.
-	type ConnInterface interface {
-		io.Reader
-		io.Writer
-		Close() error
-	}
-	var upstream ConnInterface
-
 	var upstreamConfig ConfigUpstream
-	c.UpstreamConfig = &upstreamConfig
 
 	if client.DestHost == "" {
-		client.Log(2, "Using pre-set upstream")
+		client.Log(2, "Using configured upstream")
 		var err error
-		upstreamConfig, err = findUpstream()
+		upstreamConfig, err = c.Gateway.findUpstream()
 		if err != nil {
 			client.Log(3, "No upstreams available")
 			client.SendIrcError("The server has not been configured")
@@ -197,7 +207,7 @@ func (c *Client) connectUpstream() {
 			return
 		}
 	} else {
-		if !isIrcAddressAllowed(client.DestHost) {
+		if !c.Gateway.isIrcAddressAllowed(client.DestHost) {
 			client.Log(2, "Server %s is not allowed. Closing connection", client.DestHost)
 			client.SendIrcError("Not allowed to connect to " + client.DestHost)
 			client.SendClientSignal("state", "closed", "err_forbidden")
@@ -206,8 +216,10 @@ func (c *Client) connectUpstream() {
 		}
 
 		client.Log(2, "Using client given upstream")
-		upstreamConfig = configureUpstreamFromClient(c)
+		upstreamConfig = c.configureUpstream()
 	}
+
+	c.UpstreamConfig = &upstreamConfig
 
 	hook := &HookIrcConnectionPre{
 		Client:         client,
@@ -221,6 +233,25 @@ func (c *Client) connectUpstream() {
 	}
 
 	client.State = ClientStateConnecting
+
+	upstream, upstreamErr := client.makeUpstreamConnection()
+	if upstreamErr != nil {
+		// Error handling was already managed in makeUpstreamConnection()
+		return
+	}
+
+	client.State = ClientStateRegistering
+
+	client.writeWebircLines(upstream)
+	client.SendClientSignal("state", "connected")
+	client.proxyData(upstream)
+}
+
+func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
+
+	var connection ConnInterface
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -244,19 +275,19 @@ func (c *Client) connectUpstream() {
 			}
 			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
-			return
+			return nil, errors.New("error connecting upstream")
 		}
 
 		// Add the ports into the identd before possible TLS handshaking. If we do it after then
 		// there's a good chance the identd lookup will occur before the handshake has finished
-		if Config.Identd {
+		if c.Gateway.Config.Identd {
 			// Keep track of the upstreams local and remote port numbers
 			_, lPortStr, _ := net.SplitHostPort(conn.LocalAddr().String())
 			client.IrcState.LocalPort, _ = strconv.Atoi(lPortStr)
 			_, rPortStr, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			client.IrcState.RemotePort, _ = strconv.Atoi(rPortStr)
 
-			identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username, "")
+			c.Gateway.identdServ.AddIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, client.IrcState.Username, "")
 		}
 
 		if upstreamConfig.TLS {
@@ -267,14 +298,16 @@ func (c *Client) connectUpstream() {
 				client.Log(3, "Error connecting to the upstream IRCd. %s", err.Error())
 				client.SendClientSignal("state", "closed", "err_tls")
 				client.StartShutdown("err_connecting_upstream")
-				return
+				return nil, errors.New("error connecting upstream")
 			}
 
 			conn = net.Conn(tlsConn)
 		}
 
-		upstream = ConnInterface(conn)
-	} else {
+		connection = ConnInterface(conn)
+	}
+
+	if upstreamConfig.Proxy != nil {
 		// Connect to the IRCd via a proxy
 		conn := proxy.MakeKiwiProxyConnection()
 		conn.DestHost = upstreamConfig.Hostname
@@ -305,56 +338,62 @@ func (c *Client) connectUpstream() {
 
 			client.SendClientSignal("state", "closed", errString)
 			client.StartShutdown("err_connecting_upstream")
-			return
+			return nil, errors.New("error connecting upstream")
 		}
 
-		upstream = ConnInterface(conn)
+		connection = ConnInterface(conn)
 	}
 
-	client.State = ClientStateRegistering
+	return connection, nil
+}
 
+func (c *Client) writeWebircLines(upstream ConnInterface) {
 	// Send any WEBIRC lines
-	if upstreamConfig.WebircPassword != "" {
-		gatewayName := "webircgateway"
-		if Config.GatewayName != "" {
-			gatewayName = Config.GatewayName
-		}
-		if upstreamConfig.GatewayName != "" {
-			gatewayName = upstreamConfig.GatewayName
-		}
-
-		webircTags := buildWebircTags(client)
-		if strings.Contains(webircTags, " ") {
-			webircTags = ":" + webircTags
-		}
-
-		clientHostname := client.RemoteHostname
-		if Config.ClientHostname != "" {
-			clientHostname = makeClientReplacements(Config.ClientHostname, client)
-		}
-
-		remoteAddr := client.RemoteAddr
-		// Prefix IPv6 addresses that start with a : so they can be sent as an individual IRC
-		//  parameter. eg. ::1 would not parse correctly as a parameter, while 0::1 will
-		if strings.HasPrefix(remoteAddr, ":") {
-			remoteAddr = "0" + remoteAddr
-		}
-
-		webircLine := fmt.Sprintf(
-			"WEBIRC %s %s %s %s %s\n",
-			upstreamConfig.WebircPassword,
-			gatewayName,
-			clientHostname,
-			remoteAddr,
-			webircTags,
-		)
-		client.Log(1, "->upstream: %s", webircLine)
-		upstream.Write([]byte(webircLine))
-	} else {
-		client.Log(1, "No webirc to send")
+	if c.UpstreamConfig.WebircPassword == "" {
+		c.Log(1, "No webirc to send")
+		return
 	}
 
-	client.SendClientSignal("state", "connected")
+	gatewayName := "webircgateway"
+	if c.Gateway.Config.GatewayName != "" {
+		gatewayName = c.Gateway.Config.GatewayName
+	}
+	if c.UpstreamConfig.GatewayName != "" {
+		gatewayName = c.UpstreamConfig.GatewayName
+	}
+
+	webircTags := c.buildWebircTags()
+	if strings.Contains(webircTags, " ") {
+		webircTags = ":" + webircTags
+	}
+
+	clientHostname := c.RemoteHostname
+	if c.Gateway.Config.ClientHostname != "" {
+		clientHostname = makeClientReplacements(c.Gateway.Config.ClientHostname, c)
+	}
+
+	remoteAddr := c.RemoteAddr
+	// Prefix IPv6 addresses that start with a : so they can be sent as an individual IRC
+	//  parameter. eg. ::1 would not parse correctly as a parameter, while 0::1 will
+	if strings.HasPrefix(remoteAddr, ":") {
+		remoteAddr = "0" + remoteAddr
+	}
+
+	webircLine := fmt.Sprintf(
+		"WEBIRC %s %s %s %s %s\n",
+		c.UpstreamConfig.WebircPassword,
+		gatewayName,
+		clientHostname,
+		remoteAddr,
+		webircTags,
+	)
+	c.Log(1, "->upstream: %s", webircLine)
+	upstream.Write([]byte(webircLine))
+}
+
+func (c *Client) proxyData(upstream ConnInterface) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
 
 	// Data from client to upstream
 	go func() {
@@ -386,16 +425,22 @@ func (c *Client) connectUpstream() {
 				)
 			}
 
+			message, _ := irc.ParseLine(data)
+
 			hook := &HookIrcLine{
 				Client:         client,
-				UpstreamConfig: &upstreamConfig,
+				UpstreamConfig: upstreamConfig,
 				Line:           data,
+				Message:        message,
 				ToServer:       true,
 			}
 			hook.Dispatch("irc.line")
 			if hook.Halt {
 				continue
 			}
+
+			// Plugins may have modified the data
+			data = hook.Line
 
 			client.Log(1, "->upstream: %s", data)
 			data = utf8ToOther(data, client.Encoding)
@@ -429,17 +474,22 @@ func (c *Client) connectUpstream() {
 			}
 
 			data = strings.Trim(data, "\n\r")
+			message, _ := irc.ParseLine(data)
 
 			hook := &HookIrcLine{
 				Client:         client,
-				UpstreamConfig: &upstreamConfig,
+				UpstreamConfig: upstreamConfig,
 				Line:           data,
+				Message:        message,
 				ToServer:       false,
 			}
 			hook.Dispatch("irc.line")
 			if hook.Halt {
 				continue
 			}
+
+			// Plugins may have modified the data
+			data = hook.Line
 
 			if data == "" {
 				continue
@@ -453,95 +503,9 @@ func (c *Client) connectUpstream() {
 				continue
 			}
 
-			m, _ := irc.ParseLine(data)
-			pLen := 0
-			if m != nil {
-				pLen = len(m.Params)
-			}
-
-			if pLen > 0 && m.Command == "NICK" && m.Prefix.Nick == c.IrcState.Nick {
-				client.IrcState.Nick = m.Params[0]
-			}
-			if pLen > 0 && m.Command == "001" {
-				client.IrcState.Nick = m.Params[0]
-				client.State = ClientStateConnected
-			}
-			if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
-				channel := irc.NewStateChannel(m.GetParam(0, ""))
-				c.IrcState.SetChannel(channel)
-			}
-			if pLen > 0 && m.Command == "PART" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.RemoveChannel(m.GetParam(0, ""))
-			}
-			if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
-				c.IrcState.ClearChannels()
-			}
-			// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
-			if pLen > 0 && m.Command == "MODE" {
-				if strings.HasPrefix(m.GetParam(0, ""), "#") {
-					channelName := m.GetParam(0, "")
-					modes := m.GetParam(1, "")
-
-					channel := c.IrcState.GetChannel(channelName)
-					if channel != nil {
-						channel = irc.NewStateChannel(channelName)
-						c.IrcState.SetChannel(channel)
-					}
-
-					adding := false
-					paramIdx := 1
-					for i := 0; i < len(modes); i++ {
-						mode := string(modes[i])
-
-						if mode == "+" {
-							adding = true
-						} else if mode == "-" {
-							adding = false
-						} else {
-							paramIdx++
-							param := m.GetParam(paramIdx, "")
-							if strings.ToLower(param) == strings.ToLower(c.IrcState.Nick) {
-								if adding {
-									channel.Modes[mode] = ""
-								} else {
-									delete(channel.Modes, mode)
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// If upstream reports that it supports message-tags natively, disable the wrapping of this feature for
-			// this client
-			if pLen >= 3 &&
-				strings.ToUpper(m.Command) == "CAP" &&
-				strings.ToUpper(m.Params[1]) == "LS" {
-				// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
-				caps := ""
-				if pLen >= 4 && m.Params[2] == "*" {
-					caps = strings.ToUpper(m.Params[3])
-				} else {
-					caps = strings.ToUpper(m.Params[2])
-				}
-
-				if strings.Contains(caps, "DRAFT/MESSAGE-TAGS-0.2") {
-					c.Log(1, "Upstream already supports Messagetags, disabling feature")
-					c.Features.Messagetags = false
-				}
-			}
-
-			if m != nil && client.Features.Messagetags && messageTags.CanMessageContainClientTags(m) {
-				// If we have any message tags stored for this message from a previous PRIVMSG sent
-				// by a client, add them back in
-				mTags, mTagsExists := messageTags.GetTagsFromMessage(client, m.Prefix.Nick, m)
-				if mTagsExists {
-					for k, v := range mTags.Tags {
-						m.Tags[k] = v
-					}
-
-					data = m.ToLine()
-				}
+			data = client.ProcessLineFromUpstream(data)
+			if data == "" {
+				return
 			}
 
 			client.SendClientSignal("data", data)
@@ -551,7 +515,7 @@ func (c *Client) connectUpstream() {
 		client.StartShutdown("upstream_closed")
 		upstream.Close()
 		if client.IrcState.RemotePort > 0 {
-			identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
+			c.Gateway.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
 		}
 	}()
 }
@@ -613,7 +577,7 @@ func (c *Client) clientLineWorker() {
 		c.Log(1, "ws->: %s", data)
 
 		// Some IRC lines such as USER commands may have some parameter replacements
-		line, err := c.ProcesIncomingLine(data)
+		line, err := c.ProcessLineFromClient(data)
 		if err == nil && line != "" {
 			c.UpstreamSend <- line
 		}
@@ -622,323 +586,22 @@ func (c *Client) clientLineWorker() {
 	close(c.UpstreamSend)
 }
 
-// ProcesIncomingLine - Processes and makes any changes to a line of data sent from a client
-func (c *Client) ProcesIncomingLine(line string) (string, error) {
-	message, err := irc.ParseLine(line)
-	// Just pass any random data upstream
-	if err != nil {
-		return line, nil
-	}
-
-	maybeConnectUpstream := func() {
-		if !c.UpstreamStarted && c.IrcState.Username != "" && c.Verified {
-			go c.connectUpstream()
-		}
-	}
-
-	if !c.Verified && strings.ToUpper(message.Command) == "CAPTCHA" {
-		verified := false
-		if len(message.Params) >= 1 {
-			captcha := recaptcha.R{
-				Secret: Config.ReCaptchaSecret,
-			}
-
-			verified = captcha.VerifyResponse(message.Params[0])
-		}
-
-		if !verified {
-			c.SendIrcError("Invalid captcha")
-			c.StartShutdown("unverifed")
-		} else {
-			c.Verified = true
-			maybeConnectUpstream()
-		}
-
-		return "", nil
-	}
-
-	// USER <username> <hostname> <servername> <realname>
-	if strings.ToUpper(message.Command) == "USER" && !c.UpstreamStarted {
-		if len(message.Params) < 4 {
-			return line, errors.New("Invalid USER line")
-		}
-
-		if Config.ClientUsername != "" {
-			message.Params[0] = makeClientReplacements(Config.ClientUsername, c)
-		}
-		if Config.ClientRealname != "" {
-			message.Params[3] = makeClientReplacements(Config.ClientRealname, c)
-		}
-
-		line = message.ToLine()
-
-		c.IrcState.Username = message.Params[0]
-		c.IrcState.RealName = message.Params[3]
-
-		maybeConnectUpstream()
-	}
-
-	if strings.ToUpper(message.Command) == "ENCODING" {
-		if len(message.Params) > 0 {
-			encoding, _ := charset.Lookup(message.Params[0])
-			if encoding == nil {
-				c.Log(1, "Requested unknown encoding, %s", message.Params[0])
-			} else {
-				c.Encoding = message.Params[0]
-				c.Log(1, "Set encoding to %s", message.Params[0])
-			}
-		}
-
-		// Don't send the ENCODING command upstream
-		return "", nil
-	}
-
-	if strings.ToUpper(message.Command) == "HOST" && !c.UpstreamStarted {
-		// HOST irc.network.net:6667
-		// HOST irc.network.net:+6667
-
-		if !Config.Gateway {
-			return "", nil
-		}
-
-		if len(message.Params) == 0 {
-			return "", nil
-		}
-
-		addr := message.Params[0]
-		if addr == "" {
-			c.SendIrcError("Missing host")
-			c.StartShutdown("missing_host")
-			return "", nil
-		}
-
-		// Parse host:+port into the c.dest* vars
-		portSep := strings.Index(addr, ":")
-		if portSep == -1 {
-			c.DestHost = addr
-			c.DestPort = 6667
-			c.DestTLS = false
-		} else {
-			c.DestHost = addr[0:portSep]
-			portParam := addr[portSep+1:]
-			if len(portParam) > 0 && portParam[0:1] == "+" {
-				c.DestTLS = true
-				c.DestPort, err = strconv.Atoi(portParam[1:])
-				if err != nil {
-					c.DestPort = 6697
-				}
-			} else {
-				c.DestPort, err = strconv.Atoi(portParam[0:])
-				if err != nil {
-					c.DestPort = 6667
-				}
-			}
-		}
-
-		// Don't send the HOST command upstream
-		return "", nil
-	}
-
-	// If the client supports CAP, assume the client also supports parsing MessageTags
-	// When upstream replies with its CAP listing, we check if message-tags is supported by the IRCd already and if so,
-	// we disable this feature flag again to use the IRCds native support.
-	if strings.ToUpper(message.Command) == "CAP" && len(message.Params) >= 0 && strings.ToUpper(message.Params[0]) == "LS" {
-		c.Log(1, "Enabling client Messagetags feature")
-		c.Features.Messagetags = true
-	}
-
-	// Check for any client message tags so that we can store them for replaying to other clients
-	if c.Features.Messagetags && messageTags.CanMessageContainClientTags(message) {
-		messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
-		// Prevent any client tags heading upstream
-		for k := range message.Tags {
-			if k[0] == '+' {
-				delete(message.Tags, k)
-			}
-		}
-
-		line = message.ToLine()
-	}
-
-	if c.Features.Messagetags && message.Command == "TAGMSG" {
-		if len(message.Params) == 0 {
-			return "", nil
-		}
-
-		// We can't be 100% sure what this users correct mask is, so just send the nick
-		message.Prefix.Nick = c.IrcState.Nick
-		message.Prefix.Hostname = ""
-		message.Prefix.Username = ""
-
-		thisHost := strings.ToLower(c.UpstreamConfig.Hostname)
-		target := message.Params[0]
-		for val := range Clients.Iter() {
-			curClient := val.Val.(*Client)
-			sameHost := strings.ToLower(curClient.UpstreamConfig.Hostname) == thisHost
-			if !sameHost {
-				continue
-			}
-
-			// Only send the message on to either the target nick, or the clients in a set channel
-			curNick := strings.ToLower(curClient.IrcState.Nick)
-			if target != curNick && !curClient.IrcState.HasChannel(target) {
-				continue
-			}
-
-			curClient.SendClientSignal("data", message.ToLine())
-		}
-
-		return "", nil
-	}
-
-	if strings.ToUpper(message.Command) == "EXTJWT" {
-		tokenFor := message.GetParam(0, "")
-
-		tokenM := irc.Message{}
-		tokenM.Command = "EXTJWT"
-		tokenData := jwt.MapClaims{
-			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
-			"iss":         c.UpstreamConfig.Hostname,
-			"nick":        c.IrcState.Nick,
-			"account":     "",
-			"net_modes":   []string{},
-			"channel":     "",
-			"joined":      false,
-			"time_joined": 0,
-			"modes":       []string{},
-		}
-
-		if tokenFor == "" {
-			tokenM.Params = append(tokenM.Params, "*")
-		} else {
-			tokenM.Params = append(tokenM.Params, tokenFor)
-
-			tokenForChan := c.IrcState.GetChannel(tokenFor)
-			if tokenForChan != nil {
-				tokenData["time_joined"] = tokenForChan.Joined.Unix()
-				tokenData["channel"] = tokenForChan.Name
-				tokenData["joined"] = true
-
-				modes := []string{}
-				for mode := range tokenForChan.Modes {
-					modes = append(modes, mode)
-				}
-				tokenData["modes"] = modes
-			} else {
-				tokenData["channel"] = tokenFor
-			}
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
-		tokenSigned, tokenSignedErr := token.SignedString([]byte(Config.Secret))
-		if tokenSignedErr != nil {
-			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
-			println(tokenSignedErr.Error())
-		}
-
-		tokenM.Params = append(tokenM.Params, tokenSigned)
-
-		c.SendClientSignal("data", tokenM.ToLine())
-
-		return "", nil
-	}
-
-	return line, nil
-}
-
-// Username / realname / webirc hostname can all have configurable replacements
-func makeClientReplacements(format string, client *Client) string {
-	ret := format
-	ret = strings.Replace(ret, "%i", Ipv4ToHex(client.RemoteAddr), -1)
-	ret = strings.Replace(ret, "%h", client.RemoteHostname, -1)
-	return ret
-}
-
-func isClientOriginAllowed(originHeader string) bool {
-	// Empty list of origins = all origins allowed
-	if len(Config.RemoteOrigins) == 0 {
-		return true
-	}
-
-	// No origin header = running on the same page
-	if originHeader == "" {
-		return true
-	}
-
-	foundMatch := false
-
-	for _, originMatch := range Config.RemoteOrigins {
-		if originMatch.Match(originHeader) {
-			foundMatch = true
-			break
-		}
-	}
-
-	return foundMatch
-}
-
-func isIrcAddressAllowed(addr string) bool {
-	// Empty whitelist = all destinations allowed
-	if len(Config.GatewayWhitelist) == 0 {
-		return true
-	}
-
-	foundMatch := false
-
-	for _, addrMatch := range Config.GatewayWhitelist {
-		if addrMatch.Match(addr) {
-			foundMatch = true
-			break
-		}
-	}
-
-	return foundMatch
-}
-
-func findUpstream() (ConfigUpstream, error) {
-	var ret ConfigUpstream
-
-	if len(Config.Upstreams) == 0 {
-		return ret, errors.New("No upstreams available")
-	}
-
-	randIdx := rand.Intn(len(Config.Upstreams))
-	ret = Config.Upstreams[randIdx]
-
-	return ret, nil
-}
-
-func configureUpstreamFromClient(client *Client) ConfigUpstream {
+// configureUpstream - Generate an upstream configuration from the information set on the client instance
+func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig := ConfigUpstream{}
-	upstreamConfig.Hostname = client.DestHost
-	upstreamConfig.Port = client.DestPort
-	upstreamConfig.TLS = client.DestTLS
-	upstreamConfig.Timeout = Config.GatewayTimeout
-	upstreamConfig.Throttle = Config.GatewayThrottle
-	upstreamConfig.WebircPassword = findWebircPassword(client.DestHost)
+	upstreamConfig.Hostname = c.DestHost
+	upstreamConfig.Port = c.DestPort
+	upstreamConfig.TLS = c.DestTLS
+	upstreamConfig.Timeout = c.Gateway.Config.GatewayTimeout
+	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
+	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
 
 	return upstreamConfig
 }
 
-func Ipv4ToHex(ip string) string {
-	var ipParts [4]int
-	fmt.Sscanf(ip, "%d.%d.%d.%d", &ipParts[0], &ipParts[1], &ipParts[2], &ipParts[3])
-	ipHex := fmt.Sprintf("%02x%02x%02x%02x", ipParts[0], ipParts[1], ipParts[2], ipParts[3])
-	return ipHex
-}
-
-func findWebircPassword(ircHost string) string {
-	pass, exists := Config.GatewayWebircPassword[strings.ToLower(ircHost)]
-	if !exists {
-		pass = ""
-	}
-
-	return pass
-}
-
-func buildWebircTags(client *Client) string {
+func (c *Client) buildWebircTags() string {
 	str := ""
-	for key, val := range client.Tags {
+	for key, val := range c.Tags {
 		if str != "" {
 			str += " "
 		}
@@ -951,101 +614,4 @@ func buildWebircTags(client *Client) string {
 	}
 
 	return str
-}
-
-func ensureUtf8(s string, fromEncoding string) string {
-	if utf8.ValidString(s) {
-		return s
-	}
-
-	encoding, encErr := charset.Lookup(fromEncoding)
-	if encoding == nil {
-		println("encErr:", encErr)
-		return ""
-	}
-
-	d := encoding.NewDecoder()
-	s2, _ := d.String(s)
-	return s2
-}
-
-func utf8ToOther(s string, toEncoding string) string {
-	if toEncoding == "UTF-8" && utf8.ValidString(s) {
-		return s
-	}
-
-	encoding, _ := charset.Lookup(toEncoding)
-	if encoding == nil {
-		return ""
-	}
-
-	e := encoding.NewEncoder()
-	s2, _ := e.String(s)
-	return s2
-}
-
-func GetRemoteAddressFromRequest(req *http.Request) net.IP {
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-
-	// Some web listeners such as unix sockets don't get a RemoteAddr, so default to localhost
-	if remoteAddr == "" {
-		remoteAddr = "127.0.0.1"
-	}
-
-	remoteIP := net.ParseIP(remoteAddr)
-
-	isInRange := false
-	for _, cidrRange := range Config.ReverseProxies {
-		if cidrRange.Contains(remoteIP) {
-			isInRange = true
-			break
-		}
-	}
-
-	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
-	// the headers and use the remoteIP as the users IP
-	if !isInRange {
-		return remoteIP
-	}
-
-	headerVal := req.Header.Get("x-forwarded-for")
-	ips := strings.Split(headerVal, ",")
-	ipStr := strings.Trim(ips[0], " ")
-	if ipStr != "" {
-		ip := net.ParseIP(ipStr)
-		if ip != nil {
-			remoteIP = ip
-		}
-	}
-
-	return remoteIP
-
-}
-
-func isRequestSecure(req *http.Request) bool {
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-	remoteIP := net.ParseIP(remoteAddr)
-
-	isInRange := false
-	for _, cidrRange := range Config.ReverseProxies {
-		if cidrRange.Contains(remoteIP) {
-			isInRange = true
-			break
-		}
-	}
-
-	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
-	// the headers and check the request directly
-	if !isInRange && req.TLS == nil {
-		return false
-	} else if !isInRange {
-		return true
-	}
-
-	headerVal := strings.ToLower(req.Header.Get("x-forwarded-proto"))
-	if headerVal == "https" {
-		return true
-	}
-
-	return false
 }

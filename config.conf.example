@@ -53,7 +53,7 @@ port = 80
 enabled = false
 webroot = www/
 
-[engines]
+[transports]
 websocket
 sockjs
 kiwiirc

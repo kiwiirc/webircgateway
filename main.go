@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"plugin"
 	"syscall"
 
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
@@ -42,41 +43,67 @@ func runProxy() {
 }
 
 func runGateway(configFile string) {
+	gateway := webircgateway.NewGateway()
+
 	// Print any webircgateway logout to STDOUT
-	go printLogOutput()
+	go printLogOutput(gateway)
 
-	webircgateway.SetConfigFile(configFile)
-	log.Printf("Using config %s", webircgateway.CurrentConfigFile())
+	// Listen for process signals
+	go watchForSignals(gateway)
 
-	err := webircgateway.LoadConfig()
-	if err != nil {
-		log.Printf("Config file error: %s", err.Error())
+	gateway.Config.SetConfigFile(configFile)
+	log.Printf("Using config %s", gateway.Config.CurrentConfigFile())
+
+	configErr := gateway.Config.Load()
+	if configErr != nil {
+		log.Printf("Config file error: %s", configErr.Error())
 		os.Exit(1)
 	}
 
-	watchForSignals()
-	webircgateway.Prepare()
-	webircgateway.Listen()
+	loadPlugins(gateway)
+
+	gateway.Start()
 
 	justWait := make(chan bool)
 	<-justWait
 }
 
-func watchForSignals() {
+func watchForSignals(gateway *webircgateway.Gateway) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
-	go func() {
-		for {
-			<-c
-			fmt.Println("Recieved SIGHUP, reloading config file")
-			webircgateway.LoadConfig()
-		}
-	}()
+
+	for {
+		<-c
+		fmt.Println("Recieved SIGHUP, reloading config file")
+		gateway.Config.Load()
+	}
 }
 
-func printLogOutput() {
+func printLogOutput(gateway *webircgateway.Gateway) {
 	for {
-		line, _ := <-webircgateway.LogOutput
+		line, _ := <-gateway.LogOutput
 		log.Println(line)
+	}
+}
+
+func loadPlugins(gateway *webircgateway.Gateway) {
+	for _, pluginPath := range gateway.Config.Plugins {
+		pluginFullPath := gateway.Config.ResolvePath(pluginPath)
+
+		gateway.Log(2, "Loading plugin " + pluginFullPath)
+		p, err := plugin.Open(pluginFullPath)
+		if err != nil {
+			gateway.Log(3, "Error loading plugin: " + err.Error())
+			continue
+		}
+
+		startSymbol, err := p.Lookup("Start")
+		if err != nil {
+			gateway.Log(3, "Plugin does not export a Start function! (%s)", pluginFullPath)
+			continue
+		}
+
+		startFunc := startSymbol.(func(*webircgateway.Gateway))
+		startFunc(gateway)
 	}
 }
