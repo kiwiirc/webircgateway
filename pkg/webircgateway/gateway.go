@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
+	"github.com/kiwiirc/webircgateway/pkg/proxy"
 	"github.com/orcaman/concurrent-map"
 )
 
@@ -28,6 +29,7 @@ type Gateway struct {
 	identdServ  identd.Server
 	Clients     cmap.ConcurrentMap
 	Acme        *LEManager
+	Function    string
 }
 
 func NewGateway() *Gateway {
@@ -58,6 +60,8 @@ func (s *Gateway) Log(level int, format string, args ...interface{}) {
 }
 
 func (s *Gateway) Start() {
+	s.Function = "gateway"
+
 	s.maybeStartStaticFileServer()
 	s.initHttpRoutes()
 	s.maybeStartIdentd()
@@ -65,6 +69,11 @@ func (s *Gateway) Start() {
 	for _, serverConfig := range s.Config.Servers {
 		go s.startServer(serverConfig)
 	}
+}
+
+func (s *Gateway) StartProxy() {
+	s.Function = "proxy"
+	proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
 }
 
 func (s *Gateway) maybeStartStaticFileServer() {

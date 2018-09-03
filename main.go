@@ -9,7 +9,6 @@ import (
 	"plugin"
 	"syscall"
 
-	"github.com/kiwiirc/webircgateway/pkg/proxy"
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
@@ -30,19 +29,10 @@ func main() {
 		os.Exit(0)
 	}
 
-	switch *startSection {
-	case "proxy":
-		runProxy()
-	case "gateway":
-		runGateway(*configFile)
-	}
+	runGateway(*configFile, *startSection)
 }
 
-func runProxy() {
-	proxy.Start(os.Getenv("listen"))
-}
-
-func runGateway(configFile string) {
+func runGateway(configFile string, function string) {
 	gateway := webircgateway.NewGateway()
 
 	// Print any webircgateway logout to STDOUT
@@ -62,7 +52,11 @@ func runGateway(configFile string) {
 
 	loadPlugins(gateway)
 
-	gateway.Start()
+	if function == "gateway" {
+		gateway.Start()
+	} else {
+		gateway.StartProxy()
+	}
 
 	justWait := make(chan bool)
 	<-justWait
@@ -90,10 +84,10 @@ func loadPlugins(gateway *webircgateway.Gateway) {
 	for _, pluginPath := range gateway.Config.Plugins {
 		pluginFullPath := gateway.Config.ResolvePath(pluginPath)
 
-		gateway.Log(2, "Loading plugin " + pluginFullPath)
+		gateway.Log(2, "Loading plugin "+pluginFullPath)
 		p, err := plugin.Open(pluginFullPath)
 		if err != nil {
-			gateway.Log(3, "Error loading plugin: " + err.Error())
+			gateway.Log(3, "Error loading plugin: "+err.Error())
 			continue
 		}
 

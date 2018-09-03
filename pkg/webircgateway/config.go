@@ -57,6 +57,7 @@ type Config struct {
 	GatewayThrottle       int
 	GatewayTimeout        int
 	GatewayWebircPassword map[string]string
+	Proxy                 ConfigServer
 	Upstreams             []ConfigUpstream
 	Servers               []ConfigServer
 	ServerTransports      []string
@@ -126,6 +127,7 @@ func (c *Config) Load() error {
 	// Clear the existing config
 	c.Gateway = false
 	c.GatewayWebircPassword = make(map[string]string)
+	c.Proxy = ConfigServer{}
 	c.Upstreams = []ConfigUpstream{}
 	c.Servers = []ConfigServer{}
 	c.ServerTransports = []string{}
@@ -213,6 +215,13 @@ func (c *Config) Load() error {
 			}
 
 			c.Servers = append(c.Servers, server)
+		}
+
+		if section.Name() == "proxy" {
+			server := ConfigServer{}
+			server.LocalAddr = confKeyAsString(section.Key("bind"), "0.0.0.0")
+			server.Port = confKeyAsInt(section.Key("port"), 7999)
+			c.Proxy = server
 		}
 
 		if strings.Index(section.Name(), "upstream.") == 0 {
