@@ -32,8 +32,9 @@ type Gateway struct {
 	Function    string
 }
 
-func NewGateway() *Gateway {
+func NewGateway(function string) *Gateway {
 	s := &Gateway{}
+	s.Function = function
 	s.Config = NewConfig(s)
 	s.HttpRouter = http.NewServeMux()
 	s.LogOutput = make(chan string, 5)
@@ -60,20 +61,19 @@ func (s *Gateway) Log(level int, format string, args ...interface{}) {
 }
 
 func (s *Gateway) Start() {
-	s.Function = "gateway"
+	if s.Function == "gateway" {
+		s.maybeStartStaticFileServer()
+		s.initHttpRoutes()
+		s.maybeStartIdentd()
 
-	s.maybeStartStaticFileServer()
-	s.initHttpRoutes()
-	s.maybeStartIdentd()
-
-	for _, serverConfig := range s.Config.Servers {
-		go s.startServer(serverConfig)
+		for _, serverConfig := range s.Config.Servers {
+			go s.startServer(serverConfig)
+		}
 	}
-}
 
-func (s *Gateway) StartProxy() {
-	s.Function = "proxy"
-	proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
+	if s.Function == "proxy" {
+		proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
+	}
 }
 
 func (s *Gateway) maybeStartStaticFileServer() {

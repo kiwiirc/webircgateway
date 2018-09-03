@@ -29,11 +29,16 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *startSection != "gateway" && *startSection != "proxy" {
+		fmt.Println("-run can either be 'gateway' or 'proxy'")
+		os.Exit(1)
+	}
+
 	runGateway(*configFile, *startSection)
 }
 
 func runGateway(configFile string, function string) {
-	gateway := webircgateway.NewGateway()
+	gateway := webircgateway.NewGateway(function)
 
 	// Print any webircgateway logout to STDOUT
 	go printLogOutput(gateway)
@@ -52,11 +57,7 @@ func runGateway(configFile string, function string) {
 
 	loadPlugins(gateway)
 
-	if function == "gateway" {
-		gateway.Start()
-	} else {
-		gateway.StartProxy()
-	}
+	gateway.Start()
 
 	justWait := make(chan bool)
 	<-justWait
