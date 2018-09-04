@@ -95,3 +95,22 @@ func (h *HookClientState) Dispatch(eventType string) {
 		}
 	}
 }
+
+/**
+ * HookStatus
+ * Dispatched for each line output of the _status HTTP request
+ * Types: status.client
+ */
+type HookStatus struct {
+	Hook
+	Client *Client
+	Line   string
+}
+
+func (h *HookStatus) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookStatus)); ok {
+			f(h)
+		}
+	}
+}

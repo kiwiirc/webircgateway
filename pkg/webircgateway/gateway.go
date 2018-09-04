@@ -130,8 +130,8 @@ func (s *Gateway) initHttpRoutes() error {
 		out := ""
 		for item := range s.Clients.Iter() {
 			c := item.Val.(*Client)
-			out += fmt.Sprintf(
-				"%s:%d %s %s!%s %s %s\n",
+			line := fmt.Sprintf(
+				"%s:%d %s %s!%s %s %s",
 				c.UpstreamConfig.Hostname,
 				c.UpstreamConfig.Port,
 				c.State,
@@ -140,6 +140,16 @@ func (s *Gateway) initHttpRoutes() error {
 				c.RemoteAddr,
 				c.RemoteHostname,
 			)
+
+			// Allow plugins to add their own status data
+			hook := HookStatus{}
+			hook.Client = c
+			hook.Line = line
+			hook.Dispatch("status.client")
+			if !hook.Halt {
+				out += hook.Line + "\n"
+			}
+
 		}
 
 		w.Write([]byte(out))
