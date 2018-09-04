@@ -122,7 +122,7 @@ func (s *Gateway) initHttpRoutes() error {
 	})
 
 	s.HttpRouter.HandleFunc("/webirc/_status", func(w http.ResponseWriter, r *http.Request) {
-		if s.GetRemoteAddressFromRequest(r).String() != "127.0.0.1" {
+		if !isPrivateIP(s.GetRemoteAddressFromRequest(r)) {
 			w.WriteHeader(403)
 			return
 		}
@@ -131,12 +131,14 @@ func (s *Gateway) initHttpRoutes() error {
 		for item := range s.Clients.Iter() {
 			c := item.Val.(*Client)
 			out += fmt.Sprintf(
-				"%s %s %s %s!%s\n",
-				c.RemoteAddr,
-				c.RemoteHostname,
+				"%s:%d %s %s!%s %s %s\n",
+				c.UpstreamConfig.Hostname,
+				c.UpstreamConfig.Port,
 				c.State,
 				c.IrcState.Nick,
 				c.IrcState.Username,
+				c.RemoteAddr,
+				c.RemoteHostname,
 			)
 		}
 
