@@ -83,15 +83,16 @@ func NewClient(gateway *Gateway) *Client {
 	nextClientID++
 
 	c := &Client{
-		Gateway:      gateway,
-		Id:           thisID,
-		State:        ClientStateIdle,
-		Recv:         make(chan string, 50),
-		UpstreamSend: make(chan string, 50),
-		Encoding:     "UTF-8",
-		Signals:      make(chan ClientSignal, 50),
-		Tags:         make(map[string]string),
-		IrcState:     irc.NewState(),
+		Gateway:        gateway,
+		Id:             thisID,
+		State:          ClientStateIdle,
+		Recv:           make(chan string, 50),
+		UpstreamSend:   make(chan string, 50),
+		Encoding:       "UTF-8",
+		Signals:        make(chan ClientSignal, 50),
+		Tags:           make(map[string]string),
+		IrcState:       irc.NewState(),
+		UpstreamConfig: &ConfigUpstream{},
 	}
 
 	// Auto enable some features by default. They may be disabled later on
