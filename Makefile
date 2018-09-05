@@ -3,7 +3,7 @@ PLUGINS=plugins/
 OUTFILE=webircgateway
 OUTFILE_UNIX=$(OUTFILE)_unix
 OUTFILE_DARWIN=$(OUTFILE)_darwin
-OUTFILE_WINDOWS=$(OUTFILE)_windows
+OUTFILE_WINDOWS=$(OUTFILE)_windows.exe
 OUTFILE_ARM64=$(OUTFILE)_arm64
 
 build-all: build build-plugins
