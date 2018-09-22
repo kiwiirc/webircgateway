@@ -1,3 +1,4 @@
+/plugins/*.so
 /vendor/
 .vscode
 .idea
