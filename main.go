@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"plugin"
+	"sync"
 	"syscall"
 
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
@@ -55,22 +56,28 @@ func runGateway(configFile string, function string) {
 		os.Exit(1)
 	}
 
-	loadPlugins(gateway)
+	pluginsQuit := &sync.WaitGroup{}
+	loadPlugins(gateway, pluginsQuit)
 
 	gateway.Start()
 
-	justWait := make(chan bool)
-	<-justWait
+	pluginsQuit.Wait()
+	gateway.WaitClose()
 }
 
 func watchForSignals(gateway *webircgateway.Gateway) {
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGHUP)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT)
 
 	for {
-		<-c
-		fmt.Println("Recieved SIGHUP, reloading config file")
-		gateway.Config.Load()
+		switch sig := <-c; sig {
+		case syscall.SIGINT:
+			fmt.Println("Received SIGINT, shutting down webircgateway")
+			gateway.Close()
+		case syscall.SIGHUP:
+			fmt.Println("Recieved SIGHUP, reloading config file")
+			gateway.Config.Load()
+		}
 	}
 }
 
@@ -81,7 +88,7 @@ func printLogOutput(gateway *webircgateway.Gateway) {
 	}
 }
 
-func loadPlugins(gateway *webircgateway.Gateway) {
+func loadPlugins(gateway *webircgateway.Gateway, pluginsQuit *sync.WaitGroup) {
 	for _, pluginPath := range gateway.Config.Plugins {
 		pluginFullPath := gateway.Config.ResolvePath(pluginPath)
 
@@ -98,7 +105,8 @@ func loadPlugins(gateway *webircgateway.Gateway) {
 			continue
 		}
 
-		startFunc := startSymbol.(func(*webircgateway.Gateway))
-		startFunc(gateway)
+		startFunc := startSymbol.(func(*webircgateway.Gateway, *sync.WaitGroup))
+		pluginsQuit.Add(1)
+		startFunc(gateway, pluginsQuit)
 	}
 }
