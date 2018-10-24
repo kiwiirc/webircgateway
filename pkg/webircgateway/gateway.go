@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"errors"
 
@@ -30,6 +31,8 @@ type Gateway struct {
 	Clients     cmap.ConcurrentMap
 	Acme        *LEManager
 	Function    string
+	httpSrv     *http.Server
+	closeWg     sync.WaitGroup
 }
 
 func NewGateway(function string) *Gateway {
@@ -61,6 +64,8 @@ func (s *Gateway) Log(level int, format string, args ...interface{}) {
 }
 
 func (s *Gateway) Start() {
+	s.closeWg.Add(1)
+
 	if s.Function == "gateway" {
 		s.maybeStartStaticFileServer()
 		s.initHttpRoutes()
@@ -74,6 +79,15 @@ func (s *Gateway) Start() {
 	if s.Function == "proxy" {
 		proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
 	}
+}
+
+func (s *Gateway) Close() {
+	defer s.closeWg.Done()
+	s.httpSrv.Close()
+}
+
+func (s *Gateway) WaitClose() {
+	s.closeWg.Wait()
 }
 
 func (s *Gateway) maybeStartStaticFileServer() {
@@ -191,7 +205,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 			s.Log(3, "Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
 			return
 		}
-		srv := &http.Server{
+		s.httpSrv = &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{keyPair},
@@ -200,16 +214,16 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		}
 
 		// Don't use HTTP2 since it doesn't support websockets
-		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		s.httpSrv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
-		err := srv.ListenAndServeTLS("", "")
+		err := s.httpSrv.ListenAndServeTLS("", "")
 		if err != nil {
 			s.Log(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
 		s.Log(2, "Listening with letsencrypt TLS on %s", addr)
 		leManager := s.Acme.Get(conf.LetsEncryptCacheDir)
-		srv := &http.Server{
+		s.httpSrv = &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
 				GetCertificate: leManager.GetCertificate,
@@ -218,9 +232,9 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		}
 
 		// Don't use HTTP2 since it doesn't support websockets
-		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		s.httpSrv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
-		err := srv.ListenAndServeTLS("", "")
+		err := s.httpSrv.ListenAndServeTLS("", "")
 		s.Log(3, "Listening with letsencrypt failed: %s", err.Error())
 	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
 		socketFile := conf.LocalAddr[5:]
@@ -235,7 +249,8 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		http.Serve(server, s.HttpRouter)
 	} else {
 		s.Log(2, "Listening on %s", addr)
-		err := http.ListenAndServe(addr, s.HttpRouter)
+		s.httpSrv = &http.Server{Addr: addr, Handler: s.HttpRouter}
+		err := s.httpSrv.ListenAndServe()
 		s.Log(3, err.Error())
 	}
 }
