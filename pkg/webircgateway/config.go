@@ -15,15 +15,17 @@ import (
 
 // ConfigUpstream - An upstream config
 type ConfigUpstream struct {
-	Network        string
-	Hostname       string
-	Port           int
-	TLS            bool
-	Timeout        int
-	Throttle       int
-	WebircPassword string
-	GatewayName    string
-	Proxy          *ConfigProxy
+	// Plugins may assign an arbitary address to an upstream network
+	NetworkCommonAddress string
+	Network              string
+	Hostname             string
+	Port                 int
+	TLS                  bool
+	Timeout              int
+	Throttle             int
+	WebircPassword       string
+	GatewayName          string
+	Proxy                *ConfigProxy
 }
 
 // ConfigServer - A web server config

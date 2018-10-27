@@ -317,6 +317,12 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			"modes":       []string{},
 		}
 
+		// Use the NetworkCommonAddress if a plugin as assigned one.
+		// This allows plugins to associate different upstream hosts to the same network
+		if c.UpstreamConfig.NetworkCommonAddress != "" {
+			tokenData["iss"] = c.UpstreamConfig.NetworkCommonAddress
+		}
+
 		if tokenFor == "" {
 			tokenM.Params = append(tokenM.Params, "*")
 		} else {
