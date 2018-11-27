@@ -150,6 +150,7 @@ func (c *Client) StartShutdown(reason string) {
 
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.shuttingDown)
 	if !c.shuttingDown {
+		lastState := c.State
 		c.shuttingDown = true
 		c.State = ClientStateEnding
 
@@ -160,6 +161,9 @@ func (c *Client) StartShutdown(reason string) {
 		case "err_no_upstream":
 			// Error has been logged already
 		case "client_closed":
+			if c.Gateway.Config.SendQuitOnClientClose && lastState == ClientStateConnected {
+				c.UpstreamSend <- "QUIT :Client closed"
+			}
 			c.Log(2, "Client disconnected")
 		default:
 			c.Log(2, "Closed: %s", reason)

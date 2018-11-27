@@ -71,6 +71,7 @@ type Config struct {
 	ClientHostname        string
 	Identd                bool
 	RequiresVerification  bool
+	SendQuitOnClientClose bool
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
@@ -162,6 +163,7 @@ func (c *Config) Load() error {
 			}
 
 			c.Secret = section.Key("secret").MustString("")
+			c.SendQuitOnClientClose = section.Key("send_quit_on_client_close").MustBool(true)
 		}
 
 		if section.Name() == "verify" {
