@@ -19,6 +19,13 @@ type Message struct {
 	Params  []string
 }
 
+func NewMessage() *Message {
+	return &Message{
+		Tags:   make(map[string]string),
+		Prefix: &Mask{},
+	}
+}
+
 // GetParam - Get a param value, returning a default value if it doesn't exist
 func (m *Message) GetParam(idx int, def string) string {
 	if idx < 0 || idx > len(m.Params)-1 {
@@ -117,17 +124,15 @@ func createMask(maskStr string) *Mask {
 func ParseLine(input string) (*Message, error) {
 	line := strings.Trim(input, "\r\n")
 
-	message := &Message{
-		Raw:  line,
-		Tags: make(map[string]string),
-	}
+	message := NewMessage()
+	message.Raw = line
 
 	token := ""
 	rest := ""
 
 	token, rest = nextToken(line, false)
 	if token == "" {
-		return nil, errors.New("Empty line")
+		return message, errors.New("Empty line")
 	}
 
 	// Tags. Starts with "@"
@@ -156,7 +161,7 @@ func ParseLine(input string) (*Message, error) {
 
 	// Command
 	if token == "" {
-		return nil, errors.New("Missing command")
+		return message, errors.New("Missing command")
 	}
 
 	message.Command = token

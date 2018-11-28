@@ -19,8 +19,8 @@ import (
 func (c *Client) ProcessLineFromUpstream(data string) string {
 	client := c
 
-	m, _ := irc.ParseLine(data)
-	if m == nil {
+	m, parseErr := irc.ParseLine(data)
+	if parseErr != nil {
 		return data
 	}
 
