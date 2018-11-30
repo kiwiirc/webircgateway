@@ -50,6 +50,7 @@ type Client struct {
 	EndWG            sync.WaitGroup
 	shuttingDownLock sync.Mutex
 	shuttingDown     bool
+	SeenQuit         bool
 	Recv             chan string
 	UpstreamSend     chan string
 	UpstreamStarted  bool
@@ -150,6 +151,7 @@ func (c *Client) StartShutdown(reason string) {
 
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.shuttingDown)
 	if !c.shuttingDown {
+		lastState := c.State
 		c.shuttingDown = true
 		c.State = ClientStateEnding
 
@@ -160,6 +162,9 @@ func (c *Client) StartShutdown(reason string) {
 		case "err_no_upstream":
 			// Error has been logged already
 		case "client_closed":
+			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && lastState == ClientStateConnected {
+				c.UpstreamSend <- "QUIT :" + c.Gateway.Config.SendQuitOnClientClose
+			}
 			c.Log(2, "Client disconnected")
 		default:
 			c.Log(2, "Closed: %s", reason)
@@ -424,6 +429,8 @@ func (c *Client) proxyData(upstream ConnInterface) {
 					client.IrcState.Username,
 					client.IrcState.RealName,
 				)
+			} else if strings.HasPrefix(strings.ToUpper(data), "QUIT ") {
+				client.SeenQuit = true
 			}
 
 			message, _ := irc.ParseLine(data)
