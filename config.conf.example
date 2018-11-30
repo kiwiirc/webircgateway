@@ -11,7 +11,8 @@ gateway_name = "webircgateway"
 secret = ""
 
 # Send the server a quit message when the client is closed
-send_quit_on_client_close = true
+# Leave blank to just close the socket without quit message
+send_quit_on_client_close = "Client closed"
 
 [verify]
 recaptcha_secret = ""

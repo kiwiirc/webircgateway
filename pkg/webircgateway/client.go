@@ -50,6 +50,7 @@ type Client struct {
 	EndWG            sync.WaitGroup
 	shuttingDownLock sync.Mutex
 	shuttingDown     bool
+	SeenQuit         bool
 	Recv             chan string
 	UpstreamSend     chan string
 	UpstreamStarted  bool
@@ -161,8 +162,8 @@ func (c *Client) StartShutdown(reason string) {
 		case "err_no_upstream":
 			// Error has been logged already
 		case "client_closed":
-			if c.Gateway.Config.SendQuitOnClientClose && lastState == ClientStateConnected {
-				c.UpstreamSend <- "QUIT :Client closed"
+			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && lastState == ClientStateConnected {
+				c.UpstreamSend <- "QUIT :" + c.Gateway.Config.SendQuitOnClientClose
 			}
 			c.Log(2, "Client disconnected")
 		default:
@@ -428,6 +429,8 @@ func (c *Client) proxyData(upstream ConnInterface) {
 					client.IrcState.Username,
 					client.IrcState.RealName,
 				)
+			} else if strings.HasPrefix(data, "QUIT ") {
+				client.SeenQuit = true
 			}
 
 			message, _ := irc.ParseLine(data)
