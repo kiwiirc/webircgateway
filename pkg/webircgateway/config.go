@@ -142,6 +142,7 @@ func (c *Config) Load() error {
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
 	c.Secret = ""
+	c.SendQuitOnClientClose = ""
 	c.ClientRealname = ""
 	c.ClientUsername = ""
 	c.ClientHostname = ""
