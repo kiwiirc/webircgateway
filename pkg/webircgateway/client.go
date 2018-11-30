@@ -429,7 +429,7 @@ func (c *Client) proxyData(upstream ConnInterface) {
 					client.IrcState.Username,
 					client.IrcState.RealName,
 				)
-			} else if strings.HasPrefix(data, "QUIT ") {
+			} else if strings.HasPrefix(strings.ToUpper(data), "QUIT ") {
 				client.SeenQuit = true
 			}
 
