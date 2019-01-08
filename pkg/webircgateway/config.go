@@ -253,6 +253,8 @@ func (c *Config) Load() error {
 				upstream.GatewayName = ""
 			}
 
+			upstream.NetworkCommonAddress = section.Key("network_common_address").MustString("")
+
 			c.Upstreams = append(c.Upstreams, upstream)
 		}
 
