@@ -94,7 +94,12 @@ func (t *TransportKiwiirc) sessionHandler(session sockjs.Session) {
 					// msg is in the form of ":chanId"
 					chanID := msg[1:]
 
-					_, channelExists := channels.Get(chanID)
+					c, channelExists := channels.Get(chanID)
+					if channelExists {
+						channel := c.(*TransportKiwiircChannel)
+						channel.close()
+					}
+
 					if !channelExists {
 						channel := t.makeChannel(chanID, session)
 						if channel == nil {
@@ -184,4 +189,8 @@ func (c *TransportKiwiircChannel) handleIncomingLine(line string) {
 	}
 
 	c.ClosedLock.Unlock()
+}
+
+func (c *TransportKiwiircChannel) close() {
+	c.Conn.Close(0, "Requested")
 }
