@@ -61,6 +61,10 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	if pLen > 0 && m.Command == "900" {
 		c.IrcState.Account = m.GetParam(2, "")
 	}
+	// :server.com 901 itsonlybinary itsonlybinary!itsonlybina@user/itsonlybinary :You are now logged out
+	if m.Command == "901" {
+		c.IrcState.Account = ""
+	}
 	// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
 	if pLen > 0 && m.Command == "MODE" {
 		if strings.HasPrefix(m.GetParam(0, ""), "#") {
