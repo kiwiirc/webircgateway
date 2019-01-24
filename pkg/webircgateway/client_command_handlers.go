@@ -269,7 +269,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		c.Gateway.messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
 		// Prevent any client tags heading upstream
 		for k := range message.Tags {
-			if k[0] == '+' {
+			if len(k) > 0 && k[0] == '+' {
 				delete(message.Tags, k)
 			}
 		}

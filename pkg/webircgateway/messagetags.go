@@ -56,7 +56,7 @@ func (tags *MessageTagManager) AddTagsFromMessage(client *Client, fromNick strin
 		Tags: make(map[string]string),
 	}
 	for tagName, tagVal := range msg.Tags {
-		if tagName[0] == '+' {
+		if len(tagName) > 0 && tagName[0] == '+' {
 			clientTags.Tags[tagName] = tagVal
 		}
 	}
