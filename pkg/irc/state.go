@@ -13,6 +13,7 @@ type State struct {
 	Nick         string
 	RealName     string
 	Password     string
+	Account      string
 	channelMutex sync.Mutex
 	Channels     map[string]*StateChannel
 }

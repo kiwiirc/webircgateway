@@ -57,6 +57,10 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	if pLen > 0 && m.Command == "QUIT" && m.Prefix.Nick == c.IrcState.Nick {
 		c.IrcState.ClearChannels()
 	}
+	// :server.com 900 m m!m@irc-3jg.1ab.j4ep8h.IP prawnsalad :You are now logged in as prawnsalad
+	if pLen > 0 && m.Command == "900" {
+		c.IrcState.Account = m.GetParam(2, "")
+	}
 	// :prawnsalad!prawn@kiwiirc/prawnsalad MODE #kiwiirc-dev +oo notprawn kiwi-n75
 	if pLen > 0 && m.Command == "MODE" {
 		if strings.HasPrefix(m.GetParam(0, ""), "#") {
@@ -309,7 +313,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
 			"iss":         c.UpstreamConfig.Hostname,
 			"nick":        c.IrcState.Nick,
-			"account":     "",
+			"account":     c.IrcState.Account,
 			"net_modes":   []string{},
 			"channel":     "",
 			"joined":      false,
