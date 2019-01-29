@@ -1,7 +1,9 @@
 package webircgateway
 
 import (
+	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -9,23 +11,37 @@ import (
 )
 
 type TransportWebsocket struct {
-	gateway *Gateway
+	gateway  *Gateway
+	wsServer *websocket.Server
 }
 
 func (t *TransportWebsocket) Init(g *Gateway) {
 	t.gateway = g
-	t.gateway.HttpRouter.Handle("/webirc/websocket/", websocket.Handler(t.websocketHandler))
+	t.wsServer = &websocket.Server{Handler: t.websocketHandler, Handshake: t.checkOrigin}
+	t.gateway.HttpRouter.Handle("/webirc/websocket/", t.wsServer)
+}
+
+func (t *TransportWebsocket) checkOrigin(config *websocket.Config, req *http.Request) (err error) {
+	config.Origin, err = websocket.Origin(config, req)
+
+	var origin string
+	if config.Origin != nil {
+		origin = config.Origin.String()
+	} else {
+		origin = ""
+	}
+
+	if !t.gateway.isClientOriginAllowed(origin) {
+		err = fmt.Errorf("Origin %#v not allowed", origin)
+		t.gateway.Log(2, "%s. Closing connection", err)
+		return err
+	}
+
+	return err
 }
 
 func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
 	client := t.gateway.NewClient()
-
-	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
-	if !t.gateway.isClientOriginAllowed(originHeader) {
-		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
-		ws.Close()
-		return
-	}
 
 	client.RemoteAddr = t.gateway.GetRemoteAddressFromRequest(ws.Request()).String()
 
