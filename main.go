@@ -41,6 +41,8 @@ func main() {
 func runGateway(configFile string, function string) {
 	gateway := webircgateway.NewGateway(function)
 
+	log.SetFlags(log.Flags() | log.Lmicroseconds)
+
 	// Print any webircgateway logout to STDOUT
 	go printLogOutput(gateway)
 
