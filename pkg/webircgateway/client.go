@@ -459,7 +459,9 @@ func (c *Client) proxyData(upstream ConnInterface) {
 
 			upstream.Write([]byte(data + "\r\n"))
 
-			if writeThrottle > 0 {
+			// Throttle writes if configured, but only after registration is complete. Typical IRCd
+			// behavior is to not throttle registration commands.
+			if writeThrottle > 0 && client.State != ClientStateRegistering {
 				time.Sleep(writeThrottle)
 			}
 		}
