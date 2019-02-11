@@ -64,8 +64,9 @@ kiwiirc
 
 # Websites (hostnames) that are allowed to connect here
 # No entries here will allow any website to connect.
+# Origins do not include a trailing / after the host (and optional port)
 [allowed_origins]
-#*://example.com
+#"*://example.com"
 
 # If using a reverse proxy, it must be whitelisted for the client
 # hostnames to be read correctly. In CIDR format.
