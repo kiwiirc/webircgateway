@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -45,7 +46,7 @@ type ClientSignal [3]string
 // Client - Connecting client struct
 type Client struct {
 	Gateway          *Gateway
-	Id               int
+	Id               uint64
 	State            string
 	EndWG            sync.WaitGroup
 	shuttingDownLock sync.Mutex
@@ -76,12 +77,11 @@ type Client struct {
 	}
 }
 
-var nextClientID = 1
+var nextClientID uint64 = 1
 
 // NewClient - Makes a new client
 func NewClient(gateway *Gateway) *Client {
-	thisID := nextClientID
-	nextClientID++
+	thisID := atomic.AddUint64(&nextClientID, 1)
 
 	c := &Client{
 		Gateway:        gateway,
