@@ -34,7 +34,7 @@ func (le *LEManager) Get(certCacheDir string) *autocert.Manager {
 				return nil
 			},
 		}
-		le.gateway.HttpRouter.Handle("/.well-known/", le.Manager.HTTPHandler(le.gateway.HttpRouter))
+		le.gateway.HttpRouter.Handle("/.well-known/", le.Manager.HTTPHandler(nil))
 	}
 
 	return le.Manager
