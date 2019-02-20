@@ -259,7 +259,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	// If the client supports CAP, assume the client also supports parsing MessageTags
 	// When upstream replies with its CAP listing, we check if message-tags is supported by the IRCd already and if so,
 	// we disable this feature flag again to use the IRCds native support.
-	if strings.ToUpper(message.Command) == "CAP" && len(message.Params) >= 0 && strings.ToUpper(message.Params[0]) == "LS" {
+	if strings.ToUpper(message.Command) == "CAP" && len(message.Params) > 0 && strings.ToUpper(message.Params[0]) == "LS" {
 		c.Log(1, "Enabling client Messagetags feature")
 		c.Features.Messagetags = true
 	}
