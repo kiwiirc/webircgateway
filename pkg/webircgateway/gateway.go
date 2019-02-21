@@ -126,7 +126,7 @@ func (s *Gateway) initHttpRoutes() error {
 	}
 
 	// Add some general server info about this webircgateway instance
-	s.HttpRouter.HandleFunc("/webirc/", func(w http.ResponseWriter, r *http.Request) {
+	s.HttpRouter.HandleFunc("/webirc/info", func(w http.ResponseWriter, r *http.Request) {
 		out, _ := json.Marshal(map[string]interface{}{
 			"name":    "webircgateway",
 			"version": Version,
