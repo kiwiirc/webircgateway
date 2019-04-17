@@ -264,19 +264,6 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		c.Features.Messagetags = true
 	}
 
-	// Check for any client message tags so that we can store them for replaying to other clients
-	if c.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(message) {
-		c.Gateway.messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
-		// Prevent any client tags heading upstream
-		for k := range message.Tags {
-			if len(k) > 0 && k[0] == '+' {
-				delete(message.Tags, k)
-			}
-		}
-
-		line = message.ToLine()
-	}
-
 	if c.Features.Messagetags && message.Command == "TAGMSG" {
 		if len(message.Params) == 0 {
 			return "", nil
@@ -306,6 +293,19 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		}
 
 		return "", nil
+	}
+
+	// Check for any client message tags so that we can store them for replaying to other clients
+	if c.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(message) {
+		c.Gateway.messageTags.AddTagsFromMessage(c, c.IrcState.Nick, message)
+		// Prevent any client tags heading upstream
+		for k := range message.Tags {
+			if len(k) > 0 && k[0] == '+' {
+				delete(message.Tags, k)
+			}
+		}
+
+		line = message.ToLine()
 	}
 
 	if c.Features.ExtJwt && strings.ToUpper(message.Command) == "EXTJWT" {
