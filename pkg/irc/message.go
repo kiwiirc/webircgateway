@@ -141,6 +141,10 @@ func ParseLine(input string) (*Message, error) {
 		tags := strings.Split(tagsRaw, ";")
 		for _, tag := range tags {
 			parts := strings.Split(tag, "=")
+			if len(parts) > 0 && parts[0] == "" {
+				continue
+			}
+
 			if len(parts) == 1 {
 				message.Tags[parts[0]] = ""
 			} else {
