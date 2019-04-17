@@ -29,7 +29,11 @@ func NewMessageTagManager() *MessageTagManager {
 }
 
 func (tags *MessageTagManager) CanMessageContainClientTags(msg *irc.Message) bool {
-	return msg.Command == "PRIVMSG" || msg.Command == "NOTICE"
+	return containsOneOf(msg.Command, []string{
+		"PRIVMSG",
+		"NOTICE",
+		"TAGMSG",
+	})
 }
 
 func (tags *MessageTagManager) RunGarbageCollectionLoop() {

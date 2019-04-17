@@ -79,3 +79,13 @@ func utf8ToOther(s string, toEncoding string) string {
 	s2, _ := e.String(s)
 	return s2
 }
+
+func containsOneOf(s string, substrs []string) bool {
+	for _, substr := range substrs {
+		if strings.Contains(s, substr) {
+			return true
+		}
+	}
+
+	return false
+}
