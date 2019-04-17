@@ -114,7 +114,7 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 			caps = strings.ToUpper(m.Params[2])
 		}
 
-		if strings.Contains(caps, "DRAFT/MESSAGE-TAGS-0.2") {
+		if containsOneOf(caps, []string{"DRAFT/MESSAGE-TAGS-0.2", "MESSAGE-TAGS"}) {
 			c.Log(1, "Upstream already supports Messagetags, disabling feature")
 			c.Features.Messagetags = false
 		}
