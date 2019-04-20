@@ -75,6 +75,8 @@ type Client struct {
 		Metadata    bool
 		ExtJwt      bool
 	}
+	// The specific message-tags CAP that the client has requested if we are wrapping it
+	RequestedMessageTagsCap string
 }
 
 var nextClientID uint64 = 1

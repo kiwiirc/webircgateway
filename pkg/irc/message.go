@@ -35,6 +35,11 @@ func (m *Message) GetParam(idx int, def string) string {
 	return m.Params[idx]
 }
 
+// GetParamU - Get a param value in uppercase, returning a default value if it doesn't exist
+func (m *Message) GetParamU(idx int, def string) string {
+	return strings.ToUpper(m.GetParam(idx, def))
+}
+
 // ToLine - Convert the Message struct to its raw IRC line
 func (m *Message) ToLine() string {
 	line := ""

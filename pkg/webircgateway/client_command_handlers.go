@@ -105,19 +105,39 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	// this client
 	if pLen >= 3 &&
 		strings.ToUpper(m.Command) == "CAP" &&
-		strings.ToUpper(m.Params[1]) == "LS" {
+		m.GetParamU(1, "") == "LS" {
 		// The CAPs could be param 2 or 3 depending on if were using multiple lines to list them all.
 		caps := ""
 		if pLen >= 4 && m.Params[2] == "*" {
-			caps = strings.ToUpper(m.Params[3])
+			caps = m.GetParamU(3, "")
 		} else {
-			caps = strings.ToUpper(m.Params[2])
+			caps = m.GetParamU(2, "")
 		}
 
 		if containsOneOf(caps, []string{"DRAFT/MESSAGE-TAGS-0.2", "MESSAGE-TAGS"}) {
 			c.Log(1, "Upstream already supports Messagetags, disabling feature")
 			c.Features.Messagetags = false
 		}
+
+		// Inject message-tags cap into the last line of IRCd capabilities
+		if c.Features.Messagetags && m.Params[2] != "*" {
+			m.Params[2] += " message-tags"
+			data = m.ToLine()
+		}
+	}
+
+	// If we requested message-tags, make sure to include it in the ACK when
+	// the IRCd sends the ACK through
+	if m != nil &&
+		client.RequestedMessageTagsCap != "" &&
+		strings.ToUpper(m.Command) == "CAP" &&
+		m.GetParamU(1, "") == "ACK" &&
+		!strings.Contains(m.GetParamU(2, ""), "MESSAGE-TAGS") {
+
+		m.Params[2] += " " + client.RequestedMessageTagsCap
+		data = m.ToLine()
+
+		client.RequestedMessageTagsCap = ""
 	}
 
 	if m != nil && client.Features.Messagetags && c.Gateway.messageTags.CanMessageContainClientTags(m) {
@@ -262,6 +282,32 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	if strings.ToUpper(message.Command) == "CAP" && len(message.Params) > 0 && strings.ToUpper(message.Params[0]) == "LS" {
 		c.Log(1, "Enabling client Messagetags feature")
 		c.Features.Messagetags = true
+	}
+
+	// If we are wrapping the Messagetags feature, make sure the clients REQ message-tags doesn't
+	// get sent upstream
+	if c.Features.Messagetags && strings.ToUpper(message.Command) == "CAP" && message.GetParamU(0, "") == "REQ" {
+		reqCaps := strings.ToLower(message.GetParam(1, ""))
+		capsThatEnableMessageTags := []string{"message-tags", "account-tag", "server-time", "batch"}
+
+		if strings.Contains(reqCaps, "message-tags") {
+			// Rebuild the list of requested caps, without message-tags
+			caps := strings.Split(reqCaps, " ")
+			newCaps := []string{}
+			for _, cap := range caps {
+				if !strings.Contains(strings.ToLower(cap), "message-tags") {
+					newCaps = append(newCaps, cap)
+				} else {
+					c.RequestedMessageTagsCap = cap
+				}
+			}
+
+			message.Params[1] = strings.Join(newCaps, " ")
+			line = message.ToLine()
+		} else if !containsOneOf(reqCaps, capsThatEnableMessageTags) {
+			// Didn't request anything that needs message-tags cap so disable it
+			c.Features.Messagetags = false
+		}
 	}
 
 	if c.Features.Messagetags && message.Command == "TAGMSG" {
