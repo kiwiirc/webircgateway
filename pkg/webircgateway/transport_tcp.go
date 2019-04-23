@@ -60,7 +60,7 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 	_, remoteAddrPort, _ := net.SplitHostPort(conn.RemoteAddr().String())
 	client.Tags["remote-port"] = remoteAddrPort
 
-	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
+	client.Log(2, "New tcp client on %s from %s %s", conn.LocalAddr().String(), client.RemoteAddr, client.RemoteHostname)
 
 	// We wait until the client send queue has been drained
 	var sendDrained sync.WaitGroup
