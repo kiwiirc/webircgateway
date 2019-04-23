@@ -68,7 +68,7 @@ func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
 	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
 	client.Tags["remote-port"] = remoteAddrPort
 
-	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
+	client.Log(2, "New websocket client on %s from %s %s", ws.Request().Host, client.RemoteAddr, client.RemoteHostname)
 
 	// We wait until the client send queue has been drained
 	var sendDrained sync.WaitGroup

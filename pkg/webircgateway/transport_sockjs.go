@@ -54,7 +54,7 @@ func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
 	_, remoteAddrPort, _ := net.SplitHostPort(session.Request().RemoteAddr)
 	client.Tags["remote-port"] = remoteAddrPort
 
-	client.Log(2, "New client from %s %s", client.RemoteAddr, client.RemoteHostname)
+	client.Log(2, "New sockjs client on %s from %s %s", session.Request().Host, client.RemoteAddr, client.RemoteHostname)
 
 	// Read from sockjs
 	go func() {
