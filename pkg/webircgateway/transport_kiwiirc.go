@@ -59,7 +59,7 @@ func (t *TransportKiwiirc) makeChannel(chanID string, ws sockjs.Session) *Transp
 	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
 	client.Tags["remote-port"] = remoteAddrPort
 
-	client.Log(2, "New kiwi channel from %s %s", client.RemoteAddr, client.RemoteHostname)
+	client.Log(2, "New kiwi channel on %s from %s %s", ws.Request().Host, client.RemoteAddr, client.RemoteHostname)
 
 	channel := &TransportKiwiircChannel{
 		Id:           chanID,
