@@ -89,6 +89,7 @@ timeout = 5
 # Throttle the lines being written by X per second
 throttle = 2
 webirc = ""
+serverpassword = ""
 
 
 # A public gateway to any IRC network
