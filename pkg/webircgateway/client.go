@@ -68,6 +68,7 @@ type Client struct {
 	Tags map[string]string
 	// Captchas may be needed to verify a client
 	Verified bool
+	SentPass bool
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals  chan ClientSignal
 	Features struct {
@@ -251,6 +252,7 @@ func (c *Client) connectUpstream() {
 	client.State = ClientStateRegistering
 
 	client.writeWebircLines(upstream)
+	client.maybeSendPass(upstream)
 	client.SendClientSignal("state", "connected")
 	client.proxyData(upstream)
 }
@@ -399,6 +401,19 @@ func (c *Client) writeWebircLines(upstream ConnInterface) {
 	upstream.Write([]byte(webircLine))
 }
 
+func (c *Client) maybeSendPass(upstream ConnInterface) {
+	if c.UpstreamConfig.ServerPassword == "" {
+		return
+	}
+	c.SentPass = true
+	passLine := fmt.Sprintf(
+		"PASS %s\n",
+		c.UpstreamConfig.ServerPassword,
+	)
+	c.Log(1, "->upstream: %s", passLine)
+	upstream.Write([]byte(passLine))
+}
+
 func (c *Client) proxyData(upstream ConnInterface) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
@@ -423,9 +438,11 @@ func (c *Client) proxyData(upstream ConnInterface) {
 				client.Log(1, "connectUpstream() client.UpstreamSend closed")
 				break
 			}
-
-			// Hijack the USER command as we may have some overrides
-			if strings.HasPrefix(data, "USER ") {
+			if strings.HasPrefix(data, "PASS ") && c.SentPass {
+				// Hijack the PASS command if we already sent a pass command
+				continue
+			} else if strings.HasPrefix(data, "USER ") {
+				// Hijack the USER command as we may have some overrides
 				data = fmt.Sprintf(
 					"USER %s 0 * :%s",
 					client.IrcState.Username,
