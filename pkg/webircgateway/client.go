@@ -32,15 +32,6 @@ const (
 	ClientStateEnding = "ending"
 )
 
-// The upstream connection object may be either a TCP client or a KiwiProxy
-// instance. Create a common interface we can use that satisfies either
-// case.
-type ConnInterface interface {
-	io.Reader
-	io.Writer
-	Close() error
-}
-
 type ClientSignal [3]string
 
 // Client - Connecting client struct
@@ -257,11 +248,11 @@ func (c *Client) connectUpstream() {
 	client.proxyData(upstream)
 }
 
-func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
+func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
 
-	var connection ConnInterface
+	var connection io.ReadWriteCloser
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -314,7 +305,7 @@ func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
 			conn = net.Conn(tlsConn)
 		}
 
-		connection = ConnInterface(conn)
+		connection = conn
 	}
 
 	if upstreamConfig.Proxy != nil {
@@ -351,13 +342,13 @@ func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
 			return nil, errors.New("error connecting upstream")
 		}
 
-		connection = ConnInterface(conn)
+		connection = conn
 	}
 
 	return connection, nil
 }
 
-func (c *Client) writeWebircLines(upstream ConnInterface) {
+func (c *Client) writeWebircLines(upstream io.ReadWriteCloser) {
 	// Send any WEBIRC lines
 	if c.UpstreamConfig.WebircPassword == "" {
 		c.Log(1, "No webirc to send")
@@ -401,7 +392,7 @@ func (c *Client) writeWebircLines(upstream ConnInterface) {
 	upstream.Write([]byte(webircLine))
 }
 
-func (c *Client) maybeSendPass(upstream ConnInterface) {
+func (c *Client) maybeSendPass(upstream io.ReadWriteCloser) {
 	if c.UpstreamConfig.ServerPassword == "" {
 		return
 	}
@@ -414,7 +405,7 @@ func (c *Client) maybeSendPass(upstream ConnInterface) {
 	upstream.Write([]byte(passLine))
 }
 
-func (c *Client) proxyData(upstream ConnInterface) {
+func (c *Client) proxyData(upstream io.ReadWriteCloser) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
 
