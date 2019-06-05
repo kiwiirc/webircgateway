@@ -24,7 +24,7 @@ const (
 	ClientStateIdle = "idle"
 	// ClientStateConnecting - Connecting upstream
 	ClientStateConnecting = "connecting"
-	// ClientStateRegistered - Registering to the IRC network
+	// ClientStateRegistering - Registering to the IRC network
 	ClientStateRegistering = "registering"
 	// ClientStateConnected - Connected upstream
 	ClientStateConnected = "connected"
