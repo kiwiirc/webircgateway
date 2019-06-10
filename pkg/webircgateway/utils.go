@@ -1,12 +1,14 @@
 package webircgateway
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/net/html/charset"
+	"golang.org/x/time/rate"
 )
 
 var privateIPBlocks []*net.IPNet
@@ -88,4 +90,49 @@ func containsOneOf(s string, substrs []string) bool {
 	}
 
 	return false
+}
+
+type ThrottledStringChannel struct {
+	in     chan string
+	Input  chan<- string
+	out    chan string
+	Output <-chan string
+	*rate.Limiter
+}
+
+func NewThrottledStringChannel(wrappedChan chan string, limiter *rate.Limiter) *ThrottledStringChannel {
+	out := make(chan string, 50)
+
+	c := &ThrottledStringChannel{
+		in:      wrappedChan,
+		Input:   wrappedChan,
+		out:     out,
+		Output:  out,
+		Limiter: limiter,
+	}
+
+	go c.run()
+
+	return c
+}
+
+func (c *ThrottledStringChannel) run() {
+	for {
+		select {
+		case msg, ok := <-c.in:
+			if !ok {
+				close(c.out)
+				return
+			}
+
+			// start := time.Now()
+
+			c.Wait(context.Background())
+
+			// elapsed := time.Since(start)
+			// fmt.Printf("waited %v to send %v\n", elapsed, msg)
+
+			c.out <- msg
+		}
+	}
 }
