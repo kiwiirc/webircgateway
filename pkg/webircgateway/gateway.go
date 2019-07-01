@@ -227,7 +227,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
 		err := srv.ListenAndServeTLS("", "")
-		if err != nil {
+		if err != nil && err != http.ErrServerClosed {
 			s.Log(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
@@ -248,7 +248,9 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
 		err := srv.ListenAndServeTLS("", "")
-		s.Log(3, "Listening with letsencrypt failed: %s", err.Error())
+		if err != nil && err != http.ErrServerClosed {
+			s.Log(3, "Listening with letsencrypt failed: %s", err.Error())
+		}
 	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
 		socketFile := conf.LocalAddr[5:]
 		s.Log(2, "Listening on %s", socketFile)
@@ -269,6 +271,8 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		s.httpSrvsMu.Unlock()
 
 		err := srv.ListenAndServe()
-		s.Log(3, err.Error())
+		if err != nil && err != http.ErrServerClosed {
+			s.Log(3, err.Error())
+		}
 	}
 }
