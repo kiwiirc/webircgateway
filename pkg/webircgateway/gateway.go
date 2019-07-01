@@ -15,7 +15,7 @@ import (
 
 	"github.com/kiwiirc/webircgateway/pkg/identd"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
-	"github.com/orcaman/concurrent-map"
+	cmap "github.com/orcaman/concurrent-map"
 )
 
 var (
@@ -31,7 +31,8 @@ type Gateway struct {
 	Clients     cmap.ConcurrentMap
 	Acme        *LEManager
 	Function    string
-	httpSrv     *http.Server
+	httpSrvs    []*http.Server
+	httpSrvsMu  sync.Mutex
 	closeWg     sync.WaitGroup
 }
 
@@ -83,7 +84,13 @@ func (s *Gateway) Start() {
 
 func (s *Gateway) Close() {
 	defer s.closeWg.Done()
-	s.httpSrv.Close()
+
+	s.httpSrvsMu.Lock()
+	defer s.httpSrvsMu.Unlock()
+
+	for _, httpSrv := range s.httpSrvs {
+		httpSrv.Close()
+	}
 }
 
 func (s *Gateway) WaitClose() {
@@ -205,36 +212,42 @@ func (s *Gateway) startServer(conf ConfigServer) {
 			s.Log(3, "Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
 			return
 		}
-		s.httpSrv = &http.Server{
+		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{keyPair},
 			},
 			Handler: s.HttpRouter,
 		}
+		s.httpSrvsMu.Lock()
+		s.httpSrvs = append(s.httpSrvs, srv)
+		s.httpSrvsMu.Unlock()
 
 		// Don't use HTTP2 since it doesn't support websockets
-		s.httpSrv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
-		err := s.httpSrv.ListenAndServeTLS("", "")
+		err := srv.ListenAndServeTLS("", "")
 		if err != nil {
 			s.Log(3, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
 		s.Log(2, "Listening with letsencrypt TLS on %s", addr)
 		leManager := s.Acme.Get(conf.LetsEncryptCacheDir)
-		s.httpSrv = &http.Server{
+		srv := &http.Server{
 			Addr: addr,
 			TLSConfig: &tls.Config{
 				GetCertificate: leManager.GetCertificate,
 			},
 			Handler: s.HttpRouter,
 		}
+		s.httpSrvsMu.Lock()
+		s.httpSrvs = append(s.httpSrvs, srv)
+		s.httpSrvsMu.Unlock()
 
 		// Don't use HTTP2 since it doesn't support websockets
-		s.httpSrv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 
-		err := s.httpSrv.ListenAndServeTLS("", "")
+		err := srv.ListenAndServeTLS("", "")
 		s.Log(3, "Listening with letsencrypt failed: %s", err.Error())
 	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
 		socketFile := conf.LocalAddr[5:]
@@ -249,8 +262,13 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		http.Serve(server, s.HttpRouter)
 	} else {
 		s.Log(2, "Listening on %s", addr)
-		s.httpSrv = &http.Server{Addr: addr, Handler: s.HttpRouter}
-		err := s.httpSrv.ListenAndServe()
+		srv := &http.Server{Addr: addr, Handler: s.HttpRouter}
+
+		s.httpSrvsMu.Lock()
+		s.httpSrvs = append(s.httpSrvs, srv)
+		s.httpSrvsMu.Unlock()
+
+		err := srv.ListenAndServe()
 		s.Log(3, err.Error())
 	}
 }
