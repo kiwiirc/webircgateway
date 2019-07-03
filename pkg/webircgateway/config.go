@@ -24,6 +24,7 @@ type ConfigUpstream struct {
 	Timeout              int
 	Throttle             int
 	WebircPassword       string
+	ServerPassword       string
 	GatewayName          string
 	Proxy                *ConfigProxy
 }
@@ -246,6 +247,7 @@ func (c *Config) Load() error {
 			upstream.Timeout = section.Key("timeout").MustInt(10)
 			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
+			upstream.ServerPassword = section.Key("serverpassword").MustString("")
 
 			upstream.GatewayName = section.Key("gateway_name").MustString("")
 			if strings.Contains(upstream.GatewayName, " ") {
