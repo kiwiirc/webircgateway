@@ -13,7 +13,9 @@ import (
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
-const VERSION = "1.0.1"
+var VERSION = "1.0.1"
+var GITCOMMIT = "-"
+var BUILTWITHGO = "-"
 
 func init() {
 	webircgateway.Version = VERSION
@@ -26,7 +28,9 @@ func main() {
 	flag.Parse()
 
 	if *printVersion {
-		fmt.Println(webircgateway.Version)
+		fmt.Printf("Version: %s\n", webircgateway.Version)
+		fmt.Printf("Git commit: %s\n", GITCOMMIT)
+		fmt.Printf("Built with Go version: %s\n", BUILTWITHGO)
 		os.Exit(0)
 	}
 
