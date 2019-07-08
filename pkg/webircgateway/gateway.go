@@ -52,12 +52,23 @@ func NewGateway(function string) *Gateway {
 }
 
 func (s *Gateway) Log(level int, format string, args ...interface{}) {
+	s.LogWithoutHook(level, format, args...)
+
+	hook := &HookLog{
+		Level: level,
+		Line:  fmt.Sprintf(format, args...),
+	}
+	hook.Dispatch("gateway.log")
+}
+
+var LogLevels = [...]string{"L_DEBUG", "L_INFO", "L_WARN", "L_ERROR"}
+
+func (s *Gateway) LogWithoutHook(level int, format string, args ...interface{}) {
 	if level < s.Config.LogLevel {
 		return
 	}
 
-	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
-	line := fmt.Sprintf(levels[level-1]+" "+format, args...)
+	line := fmt.Sprintf(LogLevels[level-1]+" "+format, args...)
 
 	select {
 	case s.LogOutput <- line:
@@ -123,12 +134,12 @@ func (s *Gateway) initHttpRoutes() error {
 			t.Init(s)
 			engineConfigured = true
 		default:
-			s.Log(3, "Invalid server engine: '%s'", transport)
+			s.Log(4, "Invalid server engine: '%s'", transport)
 		}
 	}
 
 	if !engineConfigured {
-		s.Log(3, "No server engines configured")
+		s.Log(4, "No server engines configured")
 		return errors.New("No server engines configured")
 	}
 
@@ -183,7 +194,7 @@ func (s *Gateway) maybeStartIdentd() {
 	if s.Config.Identd {
 		err := s.identdServ.Run()
 		if err != nil {
-			s.Log(3, "Error starting identd server: %s", err.Error())
+			s.Log(4, "Error starting identd server: %s", err.Error())
 		} else {
 			s.Log(2, "Identd server started")
 		}
@@ -199,7 +210,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		t.Start(conf.LocalAddr[4:] + ":" + strconv.Itoa(conf.Port))
 	} else if conf.TLS && conf.LetsEncryptCacheDir == "" {
 		if conf.CertFile == "" || conf.KeyFile == "" {
-			s.Log(3, "'cert' and 'key' options must be set for TLS servers")
+			s.Log(4, "'cert' and 'key' options must be set for TLS servers")
 			return
 		}
 
@@ -209,7 +220,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		s.Log(2, "Listening with TLS on %s", addr)
 		keyPair, keyPairErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
 		if keyPairErr != nil {
-			s.Log(3, "Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
+			s.Log(4, "Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
 			return
 		}
 		srv := &http.Server{
@@ -228,7 +239,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 
 		err := srv.ListenAndServeTLS("", "")
 		if err != nil && err != http.ErrServerClosed {
-			s.Log(3, "Failed to listen with TLS: %s", err.Error())
+			s.Log(4, "Failed to listen with TLS: %s", err.Error())
 		}
 	} else if conf.TLS && conf.LetsEncryptCacheDir != "" {
 		s.Log(2, "Listening with letsencrypt TLS on %s", addr)
@@ -249,7 +260,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 
 		err := srv.ListenAndServeTLS("", "")
 		if err != nil && err != http.ErrServerClosed {
-			s.Log(3, "Listening with letsencrypt failed: %s", err.Error())
+			s.Log(4, "Listening with letsencrypt failed: %s", err.Error())
 		}
 	} else if strings.HasPrefix(strings.ToLower(conf.LocalAddr), "unix:") {
 		socketFile := conf.LocalAddr[5:]
@@ -257,7 +268,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 		os.Remove(socketFile)
 		server, serverErr := net.Listen("unix", socketFile)
 		if serverErr != nil {
-			s.Log(3, serverErr.Error())
+			s.Log(4, serverErr.Error())
 			return
 		}
 		os.Chmod(socketFile, conf.BindMode)
@@ -272,7 +283,7 @@ func (s *Gateway) startServer(conf ConfigServer) {
 
 		err := srv.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			s.Log(3, err.Error())
+			s.Log(4, err.Error())
 		}
 	}
 }

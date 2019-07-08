@@ -1,7 +1,6 @@
 package webircgateway
 
 import (
-	"net"
 	"strings"
 
 	"github.com/igm/sockjs-go/sockjs"
@@ -18,41 +17,18 @@ func (t *TransportSockjs) Init(g *Gateway) {
 }
 
 func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
-	client := t.gateway.NewClient()
+	connInfo := NewClientConnectionInfo(
+		strings.ToLower(session.Request().Header.Get("Origin")),
+		t.gateway.GetRemoteAddressFromRequest(session.Request()).String(),
+		session.Request(),
+		t.gateway,
+	)
 
-	originHeader := strings.ToLower(session.Request().Header.Get("Origin"))
-	if !t.gateway.isClientOriginAllowed(originHeader) {
-		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
-		session.Close(0, "Origin not allowed")
+	client, err := t.gateway.NewClient(connInfo)
+	if err != nil {
+		session.Close(0, err.Error())
 		return
 	}
-
-	client.RemoteAddr = t.gateway.GetRemoteAddressFromRequest(session.Request()).String()
-
-	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
-	if err != nil {
-		client.RemoteHostname = client.RemoteAddr
-	} else {
-		// FQDNs include a . at the end. Strip it out
-		potentialHostname := strings.Trim(clientHostnames[0], ".")
-
-		// Must check that the resolved hostname also resolves back to the users IP
-		addr, err := net.LookupIP(potentialHostname)
-		if err == nil && len(addr) == 1 && addr[0].String() == client.RemoteAddr {
-			client.RemoteHostname = potentialHostname
-		} else {
-			client.RemoteHostname = client.RemoteAddr
-		}
-	}
-
-	if t.gateway.isRequestSecure(session.Request()) {
-		client.Tags["secure"] = ""
-	}
-
-	// This doesn't make sense to have since the remote port may change between requests. Only
-	// here for testing purposes for now.
-	_, remoteAddrPort, _ := net.SplitHostPort(session.Request().RemoteAddr)
-	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New sockjs client on %s from %s %s", session.Request().Host, client.RemoteAddr, client.RemoteHostname)
 

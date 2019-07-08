@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -41,9 +42,9 @@ type Client struct {
 	Gateway          *Gateway
 	Id               uint64
 	State            string
-	EndWG            sync.WaitGroup
 	shuttingDownLock sync.Mutex
 	shuttingDown     bool
+	ShutdownReason   string
 	SeenQuit         bool
 	Recv             chan string
 	ThrottledRecv    *ThrottledStringChannel
@@ -53,16 +54,11 @@ type Client struct {
 	UpstreamRecv     chan string
 	UpstreamStarted  bool
 	UpstreamConfig   *ConfigUpstream
-	RemoteAddr       string
-	RemoteHostname   string
-	RemotePort       int
 	DestHost         string
 	DestPort         int
 	DestTLS          bool
 	IrcState         *irc.State
 	Encoding         string
-	// Tags get passed upstream via the WEBIRC command
-	Tags map[string]string
 	// Captchas may be needed to verify a client
 	Verified bool
 	SentPass bool
@@ -75,29 +71,106 @@ type Client struct {
 	}
 	// The specific message-tags CAP that the client has requested if we are wrapping it
 	RequestedMessageTagsCap string
+	*ClientConnectionInfo
 }
 
 var nextClientID uint64 = 1
 
+// ClientConnectionInfo contains information about a client connection. It is a
+// separate struct so that it can be populated before calling NewClient, so that
+// this info can be conveniently accessed even when NewClient does not return a
+// *Client value (returns an error)
+type ClientConnectionInfo struct {
+	Origin string
+	// Tags get passed upstream via the WEBIRC command
+	Tags           map[string]string
+	RemoteAddr     string
+	RemoteHostname string
+	Request        *http.Request
+}
+
+func NewClientConnectionInfo(
+	origin string,
+	remoteAddr string,
+	req *http.Request,
+	gateway *Gateway,
+) *ClientConnectionInfo {
+	connInfo := &ClientConnectionInfo{
+		Origin: origin,
+
+		Tags:       make(map[string]string),
+		RemoteAddr: remoteAddr,
+		Request:    req,
+	}
+
+	connInfo.ResolveHostname()
+
+	if req != nil && gateway.isRequestSecure(req) {
+		connInfo.Tags["secure"] = ""
+	}
+
+	// This doesn't make sense to have since the remote port may change between requests. Only
+	// here for testing purposes for now.
+	_, remoteAddrPort, _ := net.SplitHostPort(connInfo.RemoteAddr)
+	connInfo.Tags["remote-port"] = remoteAddrPort
+
+	return connInfo
+}
+
+func (connInfo *ClientConnectionInfo) ResolveHostname() {
+	clientHostnames, err := net.LookupAddr(connInfo.RemoteAddr)
+	if err != nil || len(clientHostnames) == 0 {
+		connInfo.RemoteHostname = connInfo.RemoteAddr
+	} else {
+		// FQDNs include a . at the end. Strip it out
+		potentialHostname := strings.Trim(clientHostnames[0], ".")
+
+		// Must check that the resolved hostname also resolves back to the users IP
+		addr, err := net.LookupIP(potentialHostname)
+		if err == nil && len(addr) == 1 && addr[0].String() == connInfo.RemoteAddr {
+			connInfo.RemoteHostname = potentialHostname
+		} else {
+			connInfo.RemoteHostname = connInfo.RemoteAddr
+		}
+	}
+}
+
+func LogNewClientError(gateway *Gateway, info *ClientConnectionInfo, err error) {
+	hook := HookNewClientError{
+		Gateway:              gateway,
+		ClientConnectionInfo: info,
+		Error:                err,
+	}
+
+	hook.Dispatch("new.client.error")
+}
+
 // NewClient - Makes a new client
-func NewClient(gateway *Gateway) *Client {
+func NewClient(gateway *Gateway, info *ClientConnectionInfo) (*Client, error) {
+	if !gateway.isClientOriginAllowed(info.Origin) {
+
+		err := fmt.Errorf("Origin %s not allowed. Closing connection", info.Origin)
+		LogNewClientError(gateway, info, err)
+		return nil, err
+	}
+
 	thisID := atomic.AddUint64(&nextClientID, 1)
 
 	recv := make(chan string, 50)
 	c := &Client{
-		Gateway:         gateway,
-		Id:              thisID,
-		State:           ClientStateIdle,
-		Recv:            recv,
-		ThrottledRecv:   NewThrottledStringChannel(recv, rate.NewLimiter(rate.Inf, 1)),
-		UpstreamSendIn:  make(chan string, 50),
-		UpstreamSendOut: make(chan string, 50),
-		UpstreamRecv:    make(chan string, 50),
-		Encoding:        "UTF-8",
-		Signals:         make(chan ClientSignal, 50),
-		Tags:            make(map[string]string),
-		IrcState:        irc.NewState(),
-		UpstreamConfig:  &ConfigUpstream{},
+		Gateway:              gateway,
+		Id:                   thisID,
+		State:                ClientStateIdle,
+		Recv:                 recv,
+		ThrottledRecv:        NewThrottledStringChannel(recv, rate.NewLimiter(rate.Inf, 1)),
+		UpstreamSendIn:       make(chan string, 50),
+		UpstreamSendOut:      make(chan string, 50),
+		UpstreamRecv:         make(chan string, 50),
+		Encoding:             "UTF-8",
+		Signals:              make(chan ClientSignal, 50),
+		IrcState:             irc.NewState(),
+		UpstreamConfig:       &ConfigUpstream{},
+		ClientConnectionInfo: info,
 	}
 
 	// Auto enable some features by default. They may be disabled later on
@@ -110,37 +183,28 @@ func NewClient(gateway *Gateway) *Client {
 
 	go c.clientLineWorker()
 
-	// This Add(1) will be ended once the client starts shutting down in StartShutdown()
-	c.EndWG.Add(1)
-
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
 	gateway.Clients.Set(string(c.Id), c)
-	go func() {
-		c.EndWG.Wait()
-		gateway.Clients.Remove(string(c.Id))
 
-		hook := &HookClientState{
-			Client:    c,
-			Connected: false,
-		}
-		hook.Dispatch("client.state")
-	}()
+	// trigger initial client.state hook
+	c.setState(ClientStateIdle)
 
-	hook := &HookClientState{
-		Client:    c,
-		Connected: true,
-	}
-	hook.Dispatch("client.state")
-
-	return c
+	return c, nil
 }
 
 // Log - Log a line of text with context of this client
 func (c *Client) Log(level int, format string, args ...interface{}) {
 	prefix := fmt.Sprintf("client:%d ", c.Id)
-	c.Gateway.Log(level, prefix+format, args...)
+	c.Gateway.LogWithoutHook(level, prefix+format, args...)
+
+	hook := &HookLog{
+		Client: c,
+		Level:  level,
+		Line:   fmt.Sprintf(format, args...),
+	}
+	hook.Dispatch("client.log")
 }
 
 func (c *Client) IsShuttingDown() bool {
@@ -157,7 +221,8 @@ func (c *Client) StartShutdown(reason string) {
 	if !c.shuttingDown {
 		lastState := c.State
 		c.shuttingDown = true
-		c.State = ClientStateEnding
+		c.ShutdownReason = reason
+		c.setState(ClientStateEnding)
 
 		switch reason {
 		case "upstream_closed":
@@ -175,7 +240,7 @@ func (c *Client) StartShutdown(reason string) {
 		}
 
 		close(c.Signals)
-		c.EndWG.Done()
+		c.Gateway.Clients.Remove(string(c.Id))
 	}
 }
 
@@ -242,7 +307,7 @@ func (c *Client) connectUpstream() {
 		return
 	}
 
-	client.State = ClientStateConnecting
+	client.setState(ClientStateConnecting)
 
 	upstream, upstreamErr := client.makeUpstreamConnection()
 	if upstreamErr != nil {
@@ -250,7 +315,7 @@ func (c *Client) connectUpstream() {
 		return
 	}
 
-	client.State = ClientStateRegistering
+	client.setState(ClientStateRegistering)
 
 	go func() {
 		for {
@@ -647,4 +712,14 @@ func (c *Client) buildWebircTags() string {
 	}
 
 	return str
+}
+
+func (c *Client) setState(state string) {
+	c.State = state
+
+	hook := &HookClientState{
+		Client:    c,
+		Connected: c.State != ClientStateEnding,
+	}
+	hook.Dispatch("client.state")
 }

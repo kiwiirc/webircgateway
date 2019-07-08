@@ -3,7 +3,6 @@ package webircgateway
 import (
 	"fmt"
 	"log"
-	"net"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -23,41 +22,19 @@ func (t *TransportKiwiirc) Init(g *Gateway) {
 }
 
 func (t *TransportKiwiirc) makeChannel(chanID string, ws sockjs.Session) *TransportKiwiircChannel {
-	client := t.gateway.NewClient()
+	req := ws.Request()
+	connInfo := NewClientConnectionInfo(
+		strings.ToLower(req.Header.Get("Origin")),
+		t.gateway.GetRemoteAddressFromRequest(req).String(),
+		req,
+		t.gateway,
+	)
 
-	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
-	if !t.gateway.isClientOriginAllowed(originHeader) {
-		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
-		ws.Close(0, "Origin not allowed")
+	client, err := t.gateway.NewClient(connInfo)
+	if err != nil {
+		ws.Close(0, err.Error())
 		return nil
 	}
-
-	client.RemoteAddr = t.gateway.GetRemoteAddressFromRequest(ws.Request()).String()
-
-	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
-	if err != nil || len(clientHostnames) == 0 {
-		client.RemoteHostname = client.RemoteAddr
-	} else {
-		// FQDNs include a . at the end. Strip it out
-		potentialHostname := strings.Trim(clientHostnames[0], ".")
-
-		// Must check that the resolved hostname also resolves back to the users IP
-		addr, err := net.LookupIP(potentialHostname)
-		if err == nil && len(addr) == 1 && addr[0].String() == client.RemoteAddr {
-			client.RemoteHostname = potentialHostname
-		} else {
-			client.RemoteHostname = client.RemoteAddr
-		}
-	}
-
-	if t.gateway.isRequestSecure(ws.Request()) {
-		client.Tags["secure"] = ""
-	}
-
-	// This doesn't make sense to have since the remote port may change between requests. Only
-	// here for testing purposes for now.
-	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
-	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New kiwiirc channel on %s from %s %s", ws.Request().Host, client.RemoteAddr, client.RemoteHostname)
 

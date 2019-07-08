@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-func (s *Gateway) NewClient() *Client {
-	return NewClient(s)
+func (s *Gateway) NewClient(info *ClientConnectionInfo) (*Client, error) {
+	return NewClient(s, info)
 }
 
 func (s *Gateway) isClientOriginAllowed(originHeader string) bool {

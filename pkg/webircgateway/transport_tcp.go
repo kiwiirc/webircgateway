@@ -3,6 +3,7 @@ package webircgateway
 import (
 	"bufio"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 )
@@ -18,7 +19,7 @@ func (t *TransportTcp) Init(g *Gateway) {
 func (t *TransportTcp) Start(lAddr string) {
 	l, err := net.Listen("tcp", lAddr)
 	if err != nil {
-		t.gateway.Log(3, "TCP error listening: "+err.Error())
+		t.gateway.Log(4, "TCP error listening: "+err.Error())
 		return
 	}
 	// Close the listener when the application closes.
@@ -28,7 +29,7 @@ func (t *TransportTcp) Start(lAddr string) {
 		// Listen for an incoming connection.
 		conn, err := l.Accept()
 		if err != nil {
-			t.gateway.Log(3, "TCP error accepting: "+err.Error())
+			t.gateway.Log(4, "TCP error accepting: "+err.Error())
 			break
 		}
 		// Handle connections in a new goroutine.
@@ -37,28 +38,18 @@ func (t *TransportTcp) Start(lAddr string) {
 }
 
 func (t *TransportTcp) handleConn(conn net.Conn) {
-	client := t.gateway.NewClient()
+	origin := ""
+	remoteAddr := conn.RemoteAddr().String()
+	var req *http.Request
+	gateway := t.gateway
 
-	client.RemoteAddr = conn.RemoteAddr().String()
+	connInfo := NewClientConnectionInfo(origin, remoteAddr, req, gateway)
 
-	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
+	client, err := t.gateway.NewClient(connInfo)
 	if err != nil {
-		client.RemoteHostname = client.RemoteAddr
-	} else {
-		// FQDNs include a . at the end. Strip it out
-		potentialHostname := strings.Trim(clientHostnames[0], ".")
-
-		// Must check that the resolved hostname also resolves back to the users IP
-		addr, err := net.LookupIP(potentialHostname)
-		if err == nil && len(addr) == 1 && addr[0].String() == client.RemoteAddr {
-			client.RemoteHostname = potentialHostname
-		} else {
-			client.RemoteHostname = client.RemoteAddr
-		}
+		conn.Close()
+		return
 	}
-
-	_, remoteAddrPort, _ := net.SplitHostPort(conn.RemoteAddr().String())
-	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New tcp client on %s from %s %s", conn.LocalAddr().String(), client.RemoteAddr, client.RemoteHostname)
 

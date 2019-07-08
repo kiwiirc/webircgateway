@@ -97,13 +97,13 @@ func loadPlugins(gateway *webircgateway.Gateway, pluginsQuit *sync.WaitGroup) {
 		gateway.Log(2, "Loading plugin "+pluginFullPath)
 		p, err := plugin.Open(pluginFullPath)
 		if err != nil {
-			gateway.Log(3, "Error loading plugin: "+err.Error())
+			gateway.Log(4, "Error loading plugin: "+err.Error())
 			continue
 		}
 
 		startSymbol, err := p.Lookup("Start")
 		if err != nil {
-			gateway.Log(3, "Plugin does not export a Start function! (%s)", pluginFullPath)
+			gateway.Log(4, "Plugin does not export a Start function! (%s)", pluginFullPath)
 			continue
 		}
 
