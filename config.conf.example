@@ -23,6 +23,7 @@ recaptcha_key = ""
 # the values provided from the IRC client itself.
 # %h will be replaced with the users hostname
 # %i will be replaced with a hexed value of the users IP
+# %n will be replaced with the client provided nick
 #username = "%i"
 #realname = "I am a webchat user"
 

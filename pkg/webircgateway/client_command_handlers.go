@@ -194,6 +194,13 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		return "", nil
 	}
 
+	// NICK <nickname>
+	if strings.ToUpper(message.Command) == "NICK" && !c.UpstreamStarted {
+		if len(message.Params) > 0 {
+			c.IrcState.Nick = message.Params[0]
+		}
+	}
+
 	// USER <username> <hostname> <servername> <realname>
 	if strings.ToUpper(message.Command) == "USER" && !c.UpstreamStarted {
 		if len(message.Params) < 4 {
