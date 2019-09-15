@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"sync"
 
 	"github.com/kiwiirc/webircgateway/pkg/irc"
@@ -24,22 +26,13 @@ const (
 	ClientStateIdle = "idle"
 	// ClientStateConnecting - Connecting upstream
 	ClientStateConnecting = "connecting"
-	// ClientStateRegistered - Registering to the IRC network
+	// ClientStateRegistering - Registering to the IRC network
 	ClientStateRegistering = "registering"
 	// ClientStateConnected - Connected upstream
 	ClientStateConnected = "connected"
 	// ClientStateEnding - Client is ending its connection
 	ClientStateEnding = "ending"
 )
-
-// The upstream connection object may be either a TCP client or a KiwiProxy
-// instance. Create a common interface we can use that satisfies either
-// case.
-type ConnInterface interface {
-	io.Reader
-	io.Writer
-	Close() error
-}
 
 type ClientSignal [3]string
 
@@ -53,7 +46,11 @@ type Client struct {
 	shuttingDown     bool
 	SeenQuit         bool
 	Recv             chan string
-	UpstreamSend     chan string
+	ThrottledRecv    *ThrottledStringChannel
+	UpstreamSendIn   chan string
+	UpstreamSendOut  chan string
+	upstream         io.ReadWriteCloser
+	UpstreamRecv     chan string
 	UpstreamStarted  bool
 	UpstreamConfig   *ConfigUpstream
 	RemoteAddr       string
@@ -86,17 +83,21 @@ var nextClientID uint64 = 1
 func NewClient(gateway *Gateway) *Client {
 	thisID := atomic.AddUint64(&nextClientID, 1)
 
+	recv := make(chan string, 50)
 	c := &Client{
-		Gateway:        gateway,
-		Id:             thisID,
-		State:          ClientStateIdle,
-		Recv:           make(chan string, 50),
-		UpstreamSend:   make(chan string, 50),
-		Encoding:       "UTF-8",
-		Signals:        make(chan ClientSignal, 50),
-		Tags:           make(map[string]string),
-		IrcState:       irc.NewState(),
-		UpstreamConfig: &ConfigUpstream{},
+		Gateway:         gateway,
+		Id:              thisID,
+		State:           ClientStateIdle,
+		Recv:            recv,
+		ThrottledRecv:   NewThrottledStringChannel(recv, rate.NewLimiter(rate.Inf, 1)),
+		UpstreamSendIn:  make(chan string, 50),
+		UpstreamSendOut: make(chan string, 50),
+		UpstreamRecv:    make(chan string, 50),
+		Encoding:        "UTF-8",
+		Signals:         make(chan ClientSignal, 50),
+		Tags:            make(map[string]string),
+		IrcState:        irc.NewState(),
+		UpstreamConfig:  &ConfigUpstream{},
 	}
 
 	// Auto enable some features by default. They may be disabled later on
@@ -166,7 +167,7 @@ func (c *Client) StartShutdown(reason string) {
 			// Error has been logged already
 		case "client_closed":
 			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && lastState == ClientStateConnected {
-				c.UpstreamSend <- "QUIT :" + c.Gateway.Config.SendQuitOnClientClose
+				c.processLineToUpstream("QUIT :" + c.Gateway.Config.SendQuitOnClientClose)
 			}
 			c.Log(2, "Client disconnected")
 		default:
@@ -251,17 +252,28 @@ func (c *Client) connectUpstream() {
 
 	client.State = ClientStateRegistering
 
+	go func() {
+		for {
+			line, ok := <-client.UpstreamSendIn
+			if !ok {
+				return
+			}
+			client.UpstreamSendOut <- line
+		}
+	}()
+
 	client.writeWebircLines(upstream)
 	client.maybeSendPass(upstream)
 	client.SendClientSignal("state", "connected")
 	client.proxyData(upstream)
+	client.upstream = upstream
 }
 
-func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
+func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
 
-	var connection ConnInterface
+	var connection io.ReadWriteCloser
 
 	if upstreamConfig.Proxy == nil {
 		// Connect directly to the IRCd
@@ -314,7 +326,7 @@ func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
 			conn = net.Conn(tlsConn)
 		}
 
-		connection = ConnInterface(conn)
+		connection = conn
 	}
 
 	if upstreamConfig.Proxy != nil {
@@ -351,13 +363,13 @@ func (c *Client) makeUpstreamConnection() (ConnInterface, error) {
 			return nil, errors.New("error connecting upstream")
 		}
 
-		connection = ConnInterface(conn)
+		connection = conn
 	}
 
 	return connection, nil
 }
 
-func (c *Client) writeWebircLines(upstream ConnInterface) {
+func (c *Client) writeWebircLines(upstream io.ReadWriteCloser) {
 	// Send any WEBIRC lines
 	if c.UpstreamConfig.WebircPassword == "" {
 		c.Log(1, "No webirc to send")
@@ -401,7 +413,7 @@ func (c *Client) writeWebircLines(upstream ConnInterface) {
 	upstream.Write([]byte(webircLine))
 }
 
-func (c *Client) maybeSendPass(upstream ConnInterface) {
+func (c *Client) maybeSendPass(upstream io.ReadWriteCloser) {
 	if c.UpstreamConfig.ServerPassword == "" {
 		return
 	}
@@ -414,87 +426,11 @@ func (c *Client) maybeSendPass(upstream ConnInterface) {
 	upstream.Write([]byte(passLine))
 }
 
-func (c *Client) proxyData(upstream ConnInterface) {
+func (c *Client) proxyData(upstream io.ReadWriteCloser) {
 	client := c
-	upstreamConfig := c.UpstreamConfig
-
-	// Data from client to upstream
-	go func() {
-		client.EndWG.Add(1)
-		defer func() {
-			client.EndWG.Done()
-		}()
-
-		var writeThrottle time.Duration
-		if upstreamConfig.Throttle > 0 {
-			writeThrottle = time.Duration(int64(time.Second) / int64(upstreamConfig.Throttle))
-		} else {
-			writeThrottle = 0
-		}
-
-		for {
-			data, ok := <-client.UpstreamSend
-			if !ok {
-				client.Log(1, "connectUpstream() client.UpstreamSend closed")
-				break
-			}
-			if strings.HasPrefix(data, "PASS ") && c.SentPass {
-				// Hijack the PASS command if we already sent a pass command
-				continue
-			} else if strings.HasPrefix(data, "USER ") {
-				// Hijack the USER command as we may have some overrides
-				data = fmt.Sprintf(
-					"USER %s 0 * :%s",
-					client.IrcState.Username,
-					client.IrcState.RealName,
-				)
-			} else if strings.HasPrefix(strings.ToUpper(data), "QUIT ") {
-				client.SeenQuit = true
-			}
-
-			message, _ := irc.ParseLine(data)
-
-			hook := &HookIrcLine{
-				Client:         client,
-				UpstreamConfig: upstreamConfig,
-				Line:           data,
-				Message:        message,
-				ToServer:       true,
-			}
-			hook.Dispatch("irc.line")
-			if hook.Halt {
-				continue
-			}
-
-			// Plugins may have modified the data
-			data = hook.Line
-
-			client.Log(1, "->upstream: %s", data)
-			data = utf8ToOther(data, client.Encoding)
-			if data == "" {
-				client.Log(1, "Failed to encode into '%s'. Dropping data", c.Encoding)
-				continue
-			}
-
-			upstream.Write([]byte(data + "\r\n"))
-
-			// Throttle writes if configured, but only after registration is complete. Typical IRCd
-			// behavior is to not throttle registration commands.
-			if writeThrottle > 0 && client.State != ClientStateRegistering {
-				time.Sleep(writeThrottle)
-			}
-		}
-
-		upstream.Close()
-	}()
 
 	// Data from upstream to client
 	go func() {
-		client.EndWG.Add(1)
-		defer func() {
-			client.EndWG.Done()
-		}()
-
 		reader := bufio.NewReader(upstream)
 		for {
 			data, err := reader.ReadString('\n')
@@ -503,41 +439,8 @@ func (c *Client) proxyData(upstream ConnInterface) {
 			}
 
 			data = strings.Trim(data, "\n\r")
-			message, _ := irc.ParseLine(data)
-
-			hook := &HookIrcLine{
-				Client:         client,
-				UpstreamConfig: upstreamConfig,
-				Line:           data,
-				Message:        message,
-				ToServer:       false,
-			}
-			hook.Dispatch("irc.line")
-			if hook.Halt {
-				continue
-			}
-
-			// Plugins may have modified the data
-			data = hook.Line
-
-			if data == "" {
-				continue
-			}
-
-			client.Log(1, "upstream->: %s", data)
-
-			data = ensureUtf8(data, client.Encoding)
-			if data == "" {
-				client.Log(1, "Failed to encode into 'UTF-8'. Dropping data")
-				continue
-			}
-
-			data = client.ProcessLineFromUpstream(data)
-			if data == "" {
-				return
-			}
-
-			client.SendClientSignal("data", data)
+			client.Log(1, "client.UpstreamRecv <- %s", data)
+			client.UpstreamRecv <- data
 		}
 
 		client.SendClientSignal("state", "closed")
@@ -547,6 +450,92 @@ func (c *Client) proxyData(upstream ConnInterface) {
 			c.Gateway.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
 		}
 	}()
+}
+
+func (c *Client) processLineToUpstream(data string) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
+
+	if strings.HasPrefix(data, "PASS ") && c.SentPass {
+		// Hijack the PASS command if we already sent a pass command
+		return
+	} else if strings.HasPrefix(data, "USER ") {
+		// Hijack the USER command as we may have some overrides
+		data = fmt.Sprintf(
+			"USER %s 0 * :%s",
+			client.IrcState.Username,
+			client.IrcState.RealName,
+		)
+	} else if strings.HasPrefix(strings.ToUpper(data), "QUIT ") {
+		client.SeenQuit = true
+	}
+
+	message, _ := irc.ParseLine(data)
+
+	hook := &HookIrcLine{
+		Client:         client,
+		UpstreamConfig: upstreamConfig,
+		Line:           data,
+		Message:        message,
+		ToServer:       true,
+	}
+	hook.Dispatch("irc.line")
+	if hook.Halt {
+		return
+	}
+
+	// Plugins may have modified the data
+	data = hook.Line
+
+	client.Log(1, "->upstream: %s", data)
+	data = utf8ToOther(data, client.Encoding)
+	if data == "" {
+		client.Log(1, "Failed to encode into '%s'. Dropping data", c.Encoding)
+		return
+	}
+
+	client.upstream.Write([]byte(data + "\r\n"))
+}
+
+func (c *Client) handleLineFromUpstream(data string) {
+	client := c
+	upstreamConfig := c.UpstreamConfig
+
+	message, _ := irc.ParseLine(data)
+
+	hook := &HookIrcLine{
+		Client:         client,
+		UpstreamConfig: upstreamConfig,
+		Line:           data,
+		Message:        message,
+		ToServer:       false,
+	}
+	hook.Dispatch("irc.line")
+	if hook.Halt {
+		return
+	}
+
+	// Plugins may have modified the data
+	data = hook.Line
+
+	if data == "" {
+		return
+	}
+
+	client.Log(1, "upstream->: %s", data)
+
+	data = ensureUtf8(data, client.Encoding)
+	if data == "" {
+		client.Log(1, "Failed to decode as 'UTF-8'. Dropping data")
+		return
+	}
+
+	data = client.ProcessLineFromUpstream(data)
+	if data == "" {
+		return
+	}
+
+	client.SendClientSignal("data", data)
 }
 
 func typeOfErr(err error) string {
@@ -591,28 +580,43 @@ func typeOfErr(err error) string {
 
 // Handle lines sent from the client
 func (c *Client) clientLineWorker() {
-	c.EndWG.Add(1)
-	defer func() {
-		c.EndWG.Done()
-	}()
-
+ReadLoop:
 	for {
-		data, ok := <-c.Recv
-		if !ok {
-			c.Log(1, "clientLineWorker() client.Recv closed")
-			break
-		}
+		select {
+		case clientData, ok := <-c.ThrottledRecv.Output:
+			if !ok {
+				c.Log(1, "client.Recv closed")
+				break ReadLoop
+			}
 
-		c.Log(1, "ws->: %s", data)
+			c.Log(1, "client->: %s", clientData)
 
-		// Some IRC lines such as USER commands may have some parameter replacements
-		line, err := c.ProcessLineFromClient(data)
-		if err == nil && line != "" {
-			c.UpstreamSend <- line
+			clientLine, err := c.ProcessLineFromClient(clientData)
+			if err == nil && clientLine != "" {
+				c.UpstreamSendIn <- clientLine
+			}
+
+		case line, ok := <-c.UpstreamSendOut:
+			if !ok {
+				c.Log(1, "client.UpstreamSend closed")
+				break ReadLoop
+			}
+			c.processLineToUpstream(line)
+
+		case upstreamData, ok := <-c.UpstreamRecv:
+			c.Log(1, "<-c.UpstreamRecv: %s", upstreamData)
+			if !ok {
+				c.Log(1, "client.UpstreamRecv closed")
+				break ReadLoop
+			}
+
+			c.handleLineFromUpstream(upstreamData)
 		}
 	}
 
-	close(c.UpstreamSend)
+	c.Log(1, "leaving clientLineWorker")
+
+	// close(c.UpstreamSend)
 }
 
 // configureUpstream - Generate an upstream configuration from the information set on the client instance

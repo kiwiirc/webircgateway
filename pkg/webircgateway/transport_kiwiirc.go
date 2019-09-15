@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/igm/sockjs-go/sockjs"
-	"github.com/orcaman/concurrent-map"
+	cmap "github.com/orcaman/concurrent-map"
 )
 
 type TransportKiwiirc struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
 	"golang.org/x/net/html/charset"
+	"golang.org/x/time/rate"
 )
 
 /*
@@ -32,6 +33,10 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	if pLen > 0 && m.Command == "001" {
 		client.IrcState.Nick = m.Params[0]
 		client.State = ClientStateConnected
+
+		// Throttle writes if configured, but only after registration is complete. Typical IRCd
+		// behavior is to not throttle registration commands.
+		client.ThrottledRecv.Limiter = rate.NewLimiter(rate.Limit(client.UpstreamConfig.Throttle), 1)
 	}
 	if pLen > 0 && m.Command == "005" {
 		// If EXTJWT is supported by the IRC server, disable it here
@@ -169,7 +174,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 
 	maybeConnectUpstream := func() {
 		if !c.UpstreamStarted && c.IrcState.Username != "" && c.Verified {
-			go c.connectUpstream()
+			c.connectUpstream()
 		}
 	}
 
