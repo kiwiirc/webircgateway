@@ -114,3 +114,43 @@ func (h *HookStatus) Dispatch(eventType string) {
 		}
 	}
 }
+
+/**
+ * HookLog
+ * Dispatched with log message
+ * Types: client.log, gateway.log
+ */
+type HookLog struct {
+	Hook
+	Client *Client
+	Level  int
+	Line   string
+}
+
+func (h *HookLog) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookLog)); ok {
+			f(h)
+		}
+	}
+}
+
+/**
+ * HookNewClientError
+ * Dispatched when NewClient is not successful
+ * Types: new.client.error
+ */
+type HookNewClientError struct {
+	Hook
+	Gateway              *Gateway
+	ClientConnectionInfo *ClientConnectionInfo
+	Error                error
+}
+
+func (h *HookNewClientError) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookNewClientError)); ok {
+			f(h)
+		}
+	}
+}

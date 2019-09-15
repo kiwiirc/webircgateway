@@ -2,7 +2,6 @@ package webircgateway
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -41,32 +40,24 @@ func (t *TransportWebsocket) checkOrigin(config *websocket.Config, req *http.Req
 }
 
 func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
-	client := t.gateway.NewClient()
+	req := ws.Request()
+	gateway := t.gateway
+	originURL, originParseErr := websocket.Origin(&t.wsServer.Config, req)
+	if originParseErr != nil {
+		err := fmt.Errorf("Invalid origin: %s", originParseErr)
+		t.gateway.Log(4, "%s", err)
+		return
+	}
+	origin := originURL.String()
+	remoteAddr := t.gateway.GetRemoteAddressFromRequest(ws.Request()).String()
 
-	client.RemoteAddr = t.gateway.GetRemoteAddressFromRequest(ws.Request()).String()
+	connInfo := NewClientConnectionInfo(origin, remoteAddr, req, gateway)
 
-	clientHostnames, err := net.LookupAddr(client.RemoteAddr)
+	client, err := t.gateway.NewClient(connInfo)
 	if err != nil {
-		client.RemoteHostname = client.RemoteAddr
-	} else {
-		// FQDNs include a . at the end. Strip it out
-		potentialHostname := strings.Trim(clientHostnames[0], ".")
-
-		// Must check that the resolved hostname also resolves back to the users IP
-		addr, err := net.LookupIP(potentialHostname)
-		if err == nil && len(addr) == 1 && addr[0].String() == client.RemoteAddr {
-			client.RemoteHostname = potentialHostname
-		} else {
-			client.RemoteHostname = client.RemoteAddr
-		}
+		ws.Close()
+		return
 	}
-
-	if t.gateway.isRequestSecure(ws.Request()) {
-		client.Tags["secure"] = ""
-	}
-
-	_, remoteAddrPort, _ := net.SplitHostPort(ws.Request().RemoteAddr)
-	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New websocket client on %s from %s %s", ws.Request().Host, client.RemoteAddr, client.RemoteHostname)
 

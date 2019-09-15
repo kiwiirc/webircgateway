@@ -152,7 +152,7 @@ func (c *Config) Load() error {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
 			c.LogLevel = section.Key("logLevel").MustInt(3)
 			if c.LogLevel < 1 || c.LogLevel > 3 {
-				c.gateway.Log(3, "Config option logLevel must be between 1-3. Setting default value of 3.")
+				c.gateway.Log(3, "Config option logLevel must be between 1-4. Setting default value of 3.")
 				c.LogLevel = 3
 			}
 

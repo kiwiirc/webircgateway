@@ -32,7 +32,7 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	}
 	if pLen > 0 && m.Command == "001" {
 		client.IrcState.Nick = m.Params[0]
-		client.State = ClientStateConnected
+		client.setState(ClientStateConnected)
 
 		// Throttle writes if configured, but only after registration is complete. Typical IRCd
 		// behavior is to not throttle registration commands.
@@ -413,7 +413,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
 		tokenSigned, tokenSignedErr := token.SignedString([]byte(c.Gateway.Config.Secret))
 		if tokenSignedErr != nil {
-			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
+			c.Log(4, "Error creating JWT token. %s", tokenSignedErr.Error())
 			println(tokenSignedErr.Error())
 		}
 
