@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -592,45 +593,64 @@ func typeOfErr(err error) string {
 
 // Handle lines sent from the client
 func (c *Client) clientLineWorker() {
-ReadLoop:
 	for {
-		select {
-		case clientData, ok := <-c.ThrottledRecv.Output:
-			if !ok {
-				c.Log(1, "client.Recv closed")
-				break ReadLoop
-			}
-
-			c.TrafficLog(false, true, clientData)
-
-			clientLine, err := c.ProcessLineFromClient(clientData)
-			if err == nil && clientLine != "" {
-				c.UpstreamSendIn <- clientLine
-			}
-
-		case line, ok := <-c.UpstreamSendOut:
-			if !ok {
-				c.Log(1, "client.UpstreamSend closed")
-				break ReadLoop
-			}
-
-			c.processLineToUpstream(line)
-
-		case upstreamData, ok := <-c.UpstreamRecv:
-			if !ok {
-				c.Log(1, "client.UpstreamRecv closed")
-				break ReadLoop
-			}
-
-			c.TrafficLog(true, true, upstreamData)
-
-			c.handleLineFromUpstream(upstreamData)
+		shouldQuit, _ := c.handleClientLine()
+		if shouldQuit {
+			break
 		}
+
 	}
 
 	c.Log(1, "leaving clientLineWorker")
 
 	// close(c.UpstreamSend)
+}
+
+func (c *Client) handleClientLine() (shouldQuit bool, hadErr bool) {
+	defer func() {
+		if err := recover(); err != nil {
+			c.Log(3, fmt.Sprint("Error handling data ", err))
+			fmt.Println("Error handling data ", err)
+			debug.PrintStack()
+			shouldQuit = false
+			hadErr = true
+		}
+	}()
+
+	select {
+	case clientData, ok := <-c.ThrottledRecv.Output:
+		if !ok {
+			c.Log(1, "client.Recv closed")
+			return true, false
+		}
+
+		c.TrafficLog(false, true, clientData)
+
+		clientLine, err := c.ProcessLineFromClient(clientData)
+		if err == nil && clientLine != "" {
+			c.UpstreamSendIn <- clientLine
+		}
+
+	case line, ok := <-c.UpstreamSendOut:
+		if !ok {
+			c.Log(1, "client.UpstreamSend closed")
+			return true, false
+		}
+
+		c.processLineToUpstream(line)
+
+	case upstreamData, ok := <-c.UpstreamRecv:
+		if !ok {
+			c.Log(1, "client.UpstreamRecv closed")
+			return true, false
+		}
+
+		c.TrafficLog(true, true, upstreamData)
+
+		c.handleLineFromUpstream(upstreamData)
+	}
+
+	return false, false
 }
 
 // configureUpstream - Generate an upstream configuration from the information set on the client instance
