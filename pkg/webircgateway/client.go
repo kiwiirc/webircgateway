@@ -143,6 +143,21 @@ func (c *Client) Log(level int, format string, args ...interface{}) {
 	c.Gateway.Log(level, prefix+format, args...)
 }
 
+// TrafficLog - Log out raw IRC traffic
+func (c *Client) TrafficLog(isUpstream bool, toBnc bool, traffic string) {
+	label := ""
+	if isUpstream && toBnc {
+		label = "Upstream -> BNC"
+	} else if isUpstream && !toBnc {
+		label = "BNC -> Upstream"
+	} else if !isUpstream && toBnc {
+		label = "Client -> BNC"
+	} else if !isUpstream && !toBnc {
+		label = "BNC -> Client"
+	}
+	c.Log(1, fmt.Sprintf("Traffic (%s) %s", label, traffic))
+}
+
 func (c *Client) IsShuttingDown() bool {
 	c.shuttingDownLock.Lock()
 	defer c.shuttingDownLock.Unlock()
@@ -439,7 +454,6 @@ func (c *Client) proxyData(upstream io.ReadWriteCloser) {
 			}
 
 			data = strings.Trim(data, "\n\r")
-			client.Log(1, "client.UpstreamRecv <- %s", data)
 			client.UpstreamRecv <- data
 		}
 
@@ -487,7 +501,7 @@ func (c *Client) processLineToUpstream(data string) {
 	// Plugins may have modified the data
 	data = hook.Line
 
-	client.Log(1, "->upstream: %s", data)
+	c.TrafficLog(true, false, data)
 	data = utf8ToOther(data, client.Encoding)
 	if data == "" {
 		client.Log(1, "Failed to encode into '%s'. Dropping data", c.Encoding)
@@ -521,8 +535,6 @@ func (c *Client) handleLineFromUpstream(data string) {
 	if data == "" {
 		return
 	}
-
-	client.Log(1, "upstream->: %s", data)
 
 	data = ensureUtf8(data, client.Encoding)
 	if data == "" {
@@ -589,7 +601,7 @@ ReadLoop:
 				break ReadLoop
 			}
 
-			c.Log(1, "client->: %s", clientData)
+			c.TrafficLog(false, true, clientData)
 
 			clientLine, err := c.ProcessLineFromClient(clientData)
 			if err == nil && clientLine != "" {
@@ -601,14 +613,16 @@ ReadLoop:
 				c.Log(1, "client.UpstreamSend closed")
 				break ReadLoop
 			}
+
 			c.processLineToUpstream(line)
 
 		case upstreamData, ok := <-c.UpstreamRecv:
-			c.Log(1, "<-c.UpstreamRecv: %s", upstreamData)
 			if !ok {
 				c.Log(1, "client.UpstreamRecv closed")
 				break ReadLoop
 			}
+
+			c.TrafficLog(true, true, upstreamData)
 
 			c.handleLineFromUpstream(upstreamData)
 		}
