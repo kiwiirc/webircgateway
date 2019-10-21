@@ -21,6 +21,7 @@ recaptcha_key = ""
 [clients]
 # Default username / realname for IRC connections. If disabled it will use
 # the values provided from the IRC client itself.
+# %a will be replaced with the users ip address
 # %h will be replaced with the users hostname
 # %i will be replaced with a hexed value of the users IP
 # %n will be replaced with the client provided nick
