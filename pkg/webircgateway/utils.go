@@ -39,6 +39,7 @@ func isPrivateIP(ip net.IP) bool {
 // Username / realname / webirc hostname can all have configurable replacements
 func makeClientReplacements(format string, client *Client) string {
 	ret := format
+	ret = strings.Replace(ret, "%a", client.RemoteAddr, -1)
 	ret = strings.Replace(ret, "%i", Ipv4ToHex(client.RemoteAddr), -1)
 	ret = strings.Replace(ret, "%h", client.RemoteHostname, -1)
 	ret = strings.Replace(ret, "%n", client.IrcState.Nick, -1)
