@@ -315,7 +315,13 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			}
 
 			message.Params[1] = strings.Join(newCaps, " ")
-			line = message.ToLine()
+			if strings.Trim(message.Params[1], " ") == "" {
+				// We fake this because otherwise some servers never respond.
+				c.SendClientSignal("data", "CAP * ACK :message-tags")
+				return "", nil
+			} else {
+				line = message.ToLine()
+			}
 		} else if !containsOneOf(reqCaps, capsThatEnableMessageTags) {
 			// Didn't request anything that needs message-tags cap so disable it
 			c.Features.Messagetags = false
