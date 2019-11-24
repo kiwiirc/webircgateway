@@ -610,7 +610,7 @@ func (c *Client) handleClientLine() (shouldQuit bool, hadErr bool) {
 	defer func() {
 		if err := recover(); err != nil {
 			c.Log(3, fmt.Sprint("Error handling data ", err))
-			fmt.Println("Error handling data ", err)
+			fmt.Println("Error handling data", err)
 			debug.PrintStack()
 			shouldQuit = false
 			hadErr = true
