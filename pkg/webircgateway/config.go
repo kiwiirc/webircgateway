@@ -165,7 +165,7 @@ func (c *Config) Load() error {
 			}
 
 			c.Secret = section.Key("secret").MustString("")
-			c.SendQuitOnClientClose = section.Key("send_quit_on_client_close").MustString("")
+			c.SendQuitOnClientClose = section.Key("send_quit_on_client_close").MustString("Connection closed")
 		}
 
 		if section.Name() == "verify" {
