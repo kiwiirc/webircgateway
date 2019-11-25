@@ -91,7 +91,7 @@ go build
 ```
 
 ### Running
-Once compiled and you have a config file set, run `./webircgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`.
+Once compiled and you have a config file set, run `./webircgateway --config=config.conf` to start the gateway server. You may reload the configuration file without restarting the server (no downtime!) by sending SIGHUP to the process, `kill -1 <pid of webircgateway>`. Note that this does not restart any listening servers, a restart is needed for this.
 
 ### Configuration location
 By default the configuration file is looked for in the current directly, ./config.conf. Use the --config parameter to specify a different location.
