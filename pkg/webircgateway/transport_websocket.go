@@ -99,7 +99,6 @@ func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
 		}
 
 		close(client.Recv)
-		client.StartShutdown("client_closed")
 	}()
 
 	// Process signals for the client

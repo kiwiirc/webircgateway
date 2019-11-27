@@ -77,7 +77,6 @@ func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
 		}
 
 		close(client.Recv)
-		client.StartShutdown("client_closed")
 	}()
 
 	// Process signals for the client

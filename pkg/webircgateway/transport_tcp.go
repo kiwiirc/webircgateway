@@ -89,7 +89,6 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 		}
 
 		close(client.Recv)
-		client.StartShutdown("client_closed")
 	}()
 
 	// Process signals for the client

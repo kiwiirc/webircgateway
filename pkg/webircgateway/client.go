@@ -48,10 +48,9 @@ type Client struct {
 	SeenQuit         bool
 	Recv             chan string
 	ThrottledRecv    *ThrottledStringChannel
-	UpstreamSendIn   chan string
-	UpstreamSendOut  chan string
 	upstream         io.ReadWriteCloser
 	UpstreamRecv     chan string
+	UpstreamSend     chan string
 	UpstreamStarted  bool
 	UpstreamConfig   *ConfigUpstream
 	RemoteAddr       string
@@ -86,19 +85,18 @@ func NewClient(gateway *Gateway) *Client {
 
 	recv := make(chan string, 50)
 	c := &Client{
-		Gateway:         gateway,
-		Id:              thisID,
-		State:           ClientStateIdle,
-		Recv:            recv,
-		ThrottledRecv:   NewThrottledStringChannel(recv, rate.NewLimiter(rate.Inf, 1)),
-		UpstreamSendIn:  make(chan string, 50),
-		UpstreamSendOut: make(chan string, 50),
-		UpstreamRecv:    make(chan string, 50),
-		Encoding:        "UTF-8",
-		Signals:         make(chan ClientSignal, 50),
-		Tags:            make(map[string]string),
-		IrcState:        irc.NewState(),
-		UpstreamConfig:  &ConfigUpstream{},
+		Gateway:        gateway,
+		Id:             thisID,
+		State:          ClientStateIdle,
+		Recv:           recv,
+		ThrottledRecv:  NewThrottledStringChannel(recv, rate.NewLimiter(rate.Inf, 1)),
+		UpstreamSend:   make(chan string, 50),
+		UpstreamRecv:   make(chan string, 50),
+		Encoding:       "UTF-8",
+		Signals:        make(chan ClientSignal, 50),
+		Tags:           make(map[string]string),
+		IrcState:       irc.NewState(),
+		UpstreamConfig: &ConfigUpstream{},
 	}
 
 	// Auto enable some features by default. They may be disabled later on
@@ -109,6 +107,7 @@ func NewClient(gateway *Gateway) *Client {
 		c.Verified = true
 	}
 
+	// Handles data to/from the client and upstreams
 	go c.clientLineWorker()
 
 	// This Add(1) will be ended once the client starts shutting down in StartShutdown()
@@ -145,16 +144,16 @@ func (c *Client) Log(level int, format string, args ...interface{}) {
 }
 
 // TrafficLog - Log out raw IRC traffic
-func (c *Client) TrafficLog(isUpstream bool, toBnc bool, traffic string) {
+func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 	label := ""
-	if isUpstream && toBnc {
-		label = "Upstream -> BNC"
-	} else if isUpstream && !toBnc {
-		label = "BNC -> Upstream"
-	} else if !isUpstream && toBnc {
-		label = "Client -> BNC"
-	} else if !isUpstream && !toBnc {
-		label = "BNC -> Client"
+	if isUpstream && toGateway {
+		label = "Upstream->"
+	} else if isUpstream && !toGateway {
+		label = "->Upstream"
+	} else if !isUpstream && toGateway {
+		label = "Client->"
+	} else if !isUpstream && !toGateway {
+		label = "->Client"
 	}
 	c.Log(1, fmt.Sprintf("Traffic (%s) %s", label, traffic))
 }
@@ -171,7 +170,6 @@ func (c *Client) StartShutdown(reason string) {
 
 	c.Log(1, "StartShutdown(%s) ShuttingDown=%t", reason, c.shuttingDown)
 	if !c.shuttingDown {
-		lastState := c.State
 		c.shuttingDown = true
 		c.State = ClientStateEnding
 
@@ -182,9 +180,6 @@ func (c *Client) StartShutdown(reason string) {
 		case "err_no_upstream":
 			// Error has been logged already
 		case "client_closed":
-			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && lastState == ClientStateConnected {
-				c.processLineToUpstream("QUIT :" + c.Gateway.Config.SendQuitOnClientClose)
-			}
 			c.Log(2, "Client disconnected")
 		default:
 			c.Log(2, "Closed: %s", reason)
@@ -268,21 +263,11 @@ func (c *Client) connectUpstream() {
 
 	client.State = ClientStateRegistering
 
-	go func() {
-		for {
-			line, ok := <-client.UpstreamSendIn
-			if !ok {
-				return
-			}
-			client.UpstreamSendOut <- line
-		}
-	}()
-
+	client.upstream = upstream
+	client.readUpstream()
 	client.writeWebircLines(upstream)
 	client.maybeSendPass(upstream)
 	client.SendClientSignal("state", "connected")
-	client.proxyData(upstream)
-	client.upstream = upstream
 }
 
 func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
@@ -442,31 +427,6 @@ func (c *Client) maybeSendPass(upstream io.ReadWriteCloser) {
 	upstream.Write([]byte(passLine))
 }
 
-func (c *Client) proxyData(upstream io.ReadWriteCloser) {
-	client := c
-
-	// Data from upstream to client
-	go func() {
-		reader := bufio.NewReader(upstream)
-		for {
-			data, err := reader.ReadString('\n')
-			if err != nil {
-				break
-			}
-
-			data = strings.Trim(data, "\n\r")
-			client.UpstreamRecv <- data
-		}
-
-		client.SendClientSignal("state", "closed")
-		client.StartShutdown("upstream_closed")
-		upstream.Close()
-		if client.IrcState.RemotePort > 0 {
-			c.Gateway.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
-		}
-	}()
-}
-
 func (c *Client) processLineToUpstream(data string) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
@@ -509,7 +469,11 @@ func (c *Client) processLineToUpstream(data string) {
 		return
 	}
 
-	client.upstream.Write([]byte(data + "\r\n"))
+	if client.upstream != nil {
+		client.upstream.Write([]byte(data + "\r\n"))
+	} else {
+		client.Log(2, "Tried sending data upstream before connected")
+	}
 }
 
 func (c *Client) handleLineFromUpstream(data string) {
@@ -591,10 +555,37 @@ func typeOfErr(err error) string {
 	return ""
 }
 
+func (c *Client) readUpstream() {
+	client := c
+
+	// Data from upstream to client
+	go func() {
+		reader := bufio.NewReader(client.upstream)
+		for {
+			data, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+
+			data = strings.Trim(data, "\n\r")
+			client.UpstreamRecv <- data
+		}
+
+		client.SendClientSignal("state", "closed")
+		client.StartShutdown("upstream_closed")
+		client.upstream.Close()
+		client.upstream = nil
+
+		if client.IrcState.RemotePort > 0 {
+			c.Gateway.identdServ.RemoveIdent(client.IrcState.LocalPort, client.IrcState.RemotePort, "")
+		}
+	}()
+}
+
 // Handle lines sent from the client
 func (c *Client) clientLineWorker() {
 	for {
-		shouldQuit, _ := c.handleClientLine()
+		shouldQuit, _ := c.handleDataLine()
 		if shouldQuit {
 			break
 		}
@@ -602,11 +593,9 @@ func (c *Client) clientLineWorker() {
 	}
 
 	c.Log(1, "leaving clientLineWorker")
-
-	// close(c.UpstreamSend)
 }
 
-func (c *Client) handleClientLine() (shouldQuit bool, hadErr bool) {
+func (c *Client) handleDataLine() (shouldQuit bool, hadErr bool) {
 	defer func() {
 		if err := recover(); err != nil {
 			c.Log(3, fmt.Sprint("Error handling data ", err))
@@ -617,26 +606,41 @@ func (c *Client) handleClientLine() (shouldQuit bool, hadErr bool) {
 		}
 	}()
 
+	// We only want to send data upstream if we have an upstream connection
+	upstreamSend := c.UpstreamSend
+	if c.upstream == nil {
+		upstreamSend = nil
+	}
+
 	select {
 	case clientData, ok := <-c.ThrottledRecv.Output:
 		if !ok {
 			c.Log(1, "client.Recv closed")
+			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && c.State == ClientStateConnected {
+				c.processLineToUpstream("QUIT :" + c.Gateway.Config.SendQuitOnClientClose)
+			}
+
+			c.StartShutdown("client_closed")
+
+			if c.upstream != nil {
+				c.upstream.Close()
+			}
 			return true, false
 		}
-
+		c.Log(1, "in c.ThrottledRecv.Output")
 		c.TrafficLog(false, true, clientData)
 
 		clientLine, err := c.ProcessLineFromClient(clientData)
 		if err == nil && clientLine != "" {
-			c.UpstreamSendIn <- clientLine
+			c.UpstreamSend <- clientLine
 		}
 
-	case line, ok := <-c.UpstreamSendOut:
+	case line, ok := <-upstreamSend:
 		if !ok {
 			c.Log(1, "client.UpstreamSend closed")
 			return true, false
 		}
-
+		c.Log(1, "in .UpstreamSend")
 		c.processLineToUpstream(line)
 
 	case upstreamData, ok := <-c.UpstreamRecv:
@@ -644,7 +648,7 @@ func (c *Client) handleClientLine() (shouldQuit bool, hadErr bool) {
 			c.Log(1, "client.UpstreamRecv closed")
 			return true, false
 		}
-
+		c.Log(1, "in .UpstreamRecv")
 		c.TrafficLog(true, true, upstreamData)
 
 		c.handleLineFromUpstream(upstreamData)
