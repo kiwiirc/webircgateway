@@ -114,3 +114,20 @@ func (h *HookStatus) Dispatch(eventType string) {
 		}
 	}
 }
+
+/**
+ * HookGatewayClosing
+ * Dispatched when the gateway has been told to shutdown
+ * Types: gateway.closing
+ */
+type HookGatewayClosing struct {
+	Hook
+}
+
+func (h *HookGatewayClosing) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookGatewayClosing)); ok {
+			f(h)
+		}
+	}
+}

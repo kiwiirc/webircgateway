@@ -83,6 +83,9 @@ func (s *Gateway) Start() {
 }
 
 func (s *Gateway) Close() {
+	hook := HookGatewayClosing{}
+	hook.Dispatch("gateway.closing")
+
 	defer s.closeWg.Done()
 
 	s.httpSrvsMu.Lock()
