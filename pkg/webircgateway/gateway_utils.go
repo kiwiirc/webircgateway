@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+var (
+	v4LoopbackAddr = net.ParseIP("127.0.0.1")
+)
+
 func (s *Gateway) NewClient() *Client {
 	return NewClient(s)
 }
@@ -116,6 +120,12 @@ func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
 func (s *Gateway) isRequestSecure(req *http.Request) bool {
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
 	remoteIP := net.ParseIP(remoteAddr)
+	// RemoteAddr "has no defined format". With a Unix domain socket on Linux, it'll
+	// probably be "@". Assume anything uninterpretable as host:port is Unix domain,
+	// then treat it as though it were IPv4 loopback:
+	if remoteIP == nil {
+		remoteIP = v4LoopbackAddr
+	}
 
 	isInRange := false
 	for _, cidrRange := range s.Config.ReverseProxies {
