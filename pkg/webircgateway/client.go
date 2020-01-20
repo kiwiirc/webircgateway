@@ -64,8 +64,9 @@ type Client struct {
 	// Tags get passed upstream via the WEBIRC command
 	Tags map[string]string
 	// Captchas may be needed to verify a client
-	Verified bool
-	SentPass bool
+	RequiresVerification bool
+	Verified             bool
+	SentPass             bool
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals  chan ClientSignal
 	Features struct {
@@ -102,10 +103,7 @@ func NewClient(gateway *Gateway) *Client {
 	// Auto enable some features by default. They may be disabled later on
 	c.Features.ExtJwt = true
 
-	// Auto verify the client if it's not needed
-	if !gateway.Config.RequiresVerification {
-		c.Verified = true
-	}
+	c.RequiresVerification = gateway.Config.RequiresVerification
 
 	// Handles data to/from the client and upstreams
 	go c.clientLineWorker()

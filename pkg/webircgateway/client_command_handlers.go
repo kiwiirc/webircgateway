@@ -173,7 +173,14 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	}
 
 	maybeConnectUpstream := func() {
-		if !c.UpstreamStarted && c.IrcState.Username != "" && c.Verified {
+		verified := false
+		if c.RequiresVerification && !c.Verified {
+			verified = false
+		} else {
+			verified = true
+		}
+
+		if !c.UpstreamStarted && c.IrcState.Username != "" && c.IrcState.Nick != "" && verified {
 			c.connectUpstream()
 		}
 	}
@@ -203,6 +210,10 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	if strings.ToUpper(message.Command) == "NICK" && !c.UpstreamStarted {
 		if len(message.Params) > 0 {
 			c.IrcState.Nick = message.Params[0]
+		}
+
+		if !c.UpstreamStarted {
+			maybeConnectUpstream()
 		}
 	}
 
