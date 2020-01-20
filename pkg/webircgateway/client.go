@@ -571,8 +571,7 @@ func (c *Client) readUpstream() {
 			client.UpstreamRecv <- data
 		}
 
-		client.SendClientSignal("state", "closed")
-		client.StartShutdown("upstream_closed")
+		close(client.UpstreamRecv)
 		client.upstream.Close()
 		client.upstream = nil
 
@@ -646,6 +645,8 @@ func (c *Client) handleDataLine() (shouldQuit bool, hadErr bool) {
 	case upstreamData, ok := <-c.UpstreamRecv:
 		if !ok {
 			c.Log(1, "client.UpstreamRecv closed")
+			c.SendClientSignal("state", "closed")
+			c.StartShutdown("upstream_closed")
 			return true, false
 		}
 		c.Log(1, "in .UpstreamRecv")
