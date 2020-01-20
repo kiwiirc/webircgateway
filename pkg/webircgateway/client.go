@@ -615,7 +615,7 @@ func (c *Client) handleDataLine() (shouldQuit bool, hadErr bool) {
 	case clientData, ok := <-c.ThrottledRecv.Output:
 		if !ok {
 			c.Log(1, "client.Recv closed")
-			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && c.State == ClientStateConnected {
+			if !c.SeenQuit && c.Gateway.Config.SendQuitOnClientClose != "" && c.State == ClientStateEnding {
 				c.processLineToUpstream("QUIT :" + c.Gateway.Config.SendQuitOnClientClose)
 			}
 
