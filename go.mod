@@ -12,7 +12,7 @@ require (
 	github.com/orcaman/concurrent-map v0.0.0-20190107190726-7ed82d9cb717
 	github.com/smartystreets/assertions v0.0.0-20190215210624-980c5ac6f3ac // indirect
 	github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c // indirect
-	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
+	golang.org/x/crypto v0.0.0-20200208060501-ecb85df21340
 	golang.org/x/net v0.0.0-20190503192946-f4e77d36d62c
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2 // indirect
 	golang.org/x/time v0.0.0-20181108054448-85acf8d2951c
