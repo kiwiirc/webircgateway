@@ -31,7 +31,7 @@ func (t *TransportWebsocket) checkOrigin(config *websocket.Config, req *http.Req
 		origin = ""
 	}
 
-	if !t.gateway.isClientOriginAllowed(origin) {
+	if !t.gateway.IsClientOriginAllowed(origin) {
 		err = fmt.Errorf("Origin %#v not allowed", origin)
 		t.gateway.Log(2, "%s. Closing connection", err)
 		return err
