@@ -12,7 +12,7 @@ func (s *Gateway) NewClient() *Client {
 	return NewClient(s)
 }
 
-func (s *Gateway) isClientOriginAllowed(originHeader string) bool {
+func (s *Gateway) IsClientOriginAllowed(originHeader string) bool {
 	// Empty list of origins = all origins allowed
 	if len(s.Config.RemoteOrigins) == 0 {
 		return true
