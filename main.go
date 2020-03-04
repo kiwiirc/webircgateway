@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/kiwiirc/webircgateway/pkg/plugins"
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
@@ -95,6 +96,7 @@ func printLogOutput(gateway *webircgateway.Gateway) {
 }
 
 func loadPlugins(gateway *webircgateway.Gateway, pluginsQuit *sync.WaitGroup) {
+	plugins.LoadInternalPlugins(gateway, pluginsQuit)
 	for _, pluginPath := range gateway.Config.Plugins {
 		pluginFullPath := gateway.Config.ResolvePath(pluginPath)
 
