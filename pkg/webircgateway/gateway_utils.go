@@ -79,15 +79,20 @@ func (s *Gateway) findWebircPassword(ircHost string) string {
 	return pass
 }
 
-func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
+func remoteIPFromRequest(req *http.Request) net.IP {
+	// http.Request.RemoteAddr "has no defined format". With a Unix domain socket on
+	// Linux, it'll probably be "@". Assume anything uninterpretable as host:port is
+	// Unix domain, then treat it as though it were IPv4 loopback:
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-
-	// Some web listeners such as unix sockets don't get a RemoteAddr, so default to localhost
-	if remoteAddr == "" {
-		remoteAddr = "127.0.0.1"
+	if remoteAddr != "" {
+		return net.ParseIP(remoteAddr)
+	} else {
+		return v4LoopbackAddr
 	}
+}
 
-	remoteIP := net.ParseIP(remoteAddr)
+func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
+	remoteIP := remoteIPFromRequest(req)
 
 	isInRange := false
 	for _, cidrRange := range s.Config.ReverseProxies {
@@ -118,14 +123,7 @@ func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
 }
 
 func (s *Gateway) isRequestSecure(req *http.Request) bool {
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-	remoteIP := net.ParseIP(remoteAddr)
-	// RemoteAddr "has no defined format". With a Unix domain socket on Linux, it'll
-	// probably be "@". Assume anything uninterpretable as host:port is Unix domain,
-	// then treat it as though it were IPv4 loopback:
-	if remoteIP == nil {
-		remoteIP = v4LoopbackAddr
-	}
+	remoteIP := remoteIPFromRequest(req)
 
 	isInRange := false
 	for _, cidrRange := range s.Config.ReverseProxies {
