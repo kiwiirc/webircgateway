@@ -26,7 +26,7 @@ build-plugins:
 		export plugin_name; \
 		plugin_name=$$(echo $$plugin_name | cut -d'/' -f2); \
 		echo Building $$plugin; \
-		$(GOCMD) build -buildmode=plugin -v -o "plugins/$$plugin_name.so" plugins/$$plugin_name/*; \
+		$(GOCMD) build -buildmode=plugin -mod=readonly -v -o "plugins/$$plugin_name.so" plugins/$$plugin_name/*; \
 	done
 
 run:
@@ -34,3 +34,11 @@ run:
 
 run-proxy:
 	$(GOCMD) run main.go -run=proxy
+
+build-docker:
+	docker run --rm -v "$$PWD":/myapp -w /myapp golang:1.13.4 make
+	rm -rf ./dockerbuild
+	mkdir -p ./dockerbuild/plugins
+	mv webircgateway ./dockerbuild/kiwiserver
+	mv plugins/*.so ./dockerbuild/plugins/
+
