@@ -26,7 +26,7 @@ build-plugins:
 		export plugin_name; \
 		plugin_name=$$(echo $$plugin_name | cut -d'/' -f2); \
 		echo Building $$plugin; \
-		$(GOCMD) build -buildmode=plugin -mod=readonly -v -o "plugins/$$plugin_name.so" plugins/$$plugin_name/*; \
+		$(GOCMD) build -buildmode=plugin -v -o "plugins/$$plugin_name.so" plugins/$$plugin_name/*; \
 	done
 
 run:
