@@ -7,7 +7,7 @@ GIT_COMMIT=$(shell git rev-list -1 HEAD)
 
 LDFLAGS=-ldflags "-X main.GITCOMMIT=$(GIT_COMMIT) -X main.BUILTWITHGO=$(GO_VERSION)"
 
-build-all: build build-plugins
+build-all: build-plugins build
 
 build:
 	$(GOCMD) build $(LDFLAGS) -o $(OUTFILE) -v main.go
