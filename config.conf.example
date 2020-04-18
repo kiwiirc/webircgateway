@@ -58,6 +58,7 @@ port = 80
 [fileserving]
 enabled = false
 webroot = www/
+kiwiirc_config = "/etc/kiwiirc/client.json"
 
 [transports]
 websocket

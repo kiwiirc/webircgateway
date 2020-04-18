@@ -104,6 +104,10 @@ func (s *Gateway) maybeStartStaticFileServer() {
 	if s.Config.Webroot != "" {
 		webroot := s.Config.ResolvePath(s.Config.Webroot)
 		s.Log(2, "Serving files from %s", webroot)
+		if s.Config.KiwiircConfig != "" {
+			s.Log(2, "Serving Kiwi IRC config from %s", s.Config.ResolvePath(s.Config.KiwiircConfig))
+			s.HttpRouter.HandleFunc("/static/config.json", sendKiwiircConfig)
+		}
 		s.HttpRouter.Handle("/", http.FileServer(http.Dir(webroot)))
 	}
 }

@@ -61,6 +61,12 @@ func runGateway(configFile string, function string) {
 		log.Printf("Config file error: %s", configErr.Error())
 		os.Exit(1)
 	}
+	if gateway.Config.Webroot != "" && gateway.Config.KiwiircConfig != "" {
+		err := gateway.LoadKiwiircConfig()
+		if err != nil {
+			log.Printf("Kiwi IRC config file error: %s", err.Error())
+		}
+	}
 
 	pluginsQuit := &sync.WaitGroup{}
 	loadPlugins(gateway, pluginsQuit)
@@ -83,6 +89,9 @@ func watchForSignals(gateway *webircgateway.Gateway) {
 		case syscall.SIGHUP:
 			fmt.Println("Recieved SIGHUP, reloading config file")
 			gateway.Config.Load()
+			if gateway.Config.Webroot != "" && gateway.Config.KiwiircConfig != "" {
+				gateway.LoadKiwiircConfig()
+			}
 		}
 	}
 }
