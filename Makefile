@@ -7,7 +7,7 @@ GIT_COMMIT=$(shell git rev-list -1 HEAD)
 
 LDFLAGS=-ldflags "-X main.GITCOMMIT=$(GIT_COMMIT) -X main.BUILTWITHGO=$(GO_VERSION)"
 
-build-all: build build-plugins
+build-all: build-plugins build
 
 build:
 	$(GOCMD) build $(LDFLAGS) -o $(OUTFILE) -v main.go
@@ -34,3 +34,11 @@ run:
 
 run-proxy:
 	$(GOCMD) run main.go -run=proxy
+
+build-docker:
+	docker run --rm -v "$$PWD":/myapp -w /myapp golang:1.13.4 make
+	rm -rf ./dockerbuild
+	mkdir -p ./dockerbuild/plugins
+	mv webircgateway ./dockerbuild/kiwiserver
+	mv plugins/*.so ./dockerbuild/plugins/
+

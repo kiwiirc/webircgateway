@@ -26,7 +26,7 @@ func (t *TransportKiwiirc) makeChannel(chanID string, ws sockjs.Session) *Transp
 	client := t.gateway.NewClient()
 
 	originHeader := strings.ToLower(ws.Request().Header.Get("Origin"))
-	if !t.gateway.isClientOriginAllowed(originHeader) {
+	if !t.gateway.IsClientOriginAllowed(originHeader) {
 		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
 		ws.Close(0, "Origin not allowed")
 		return nil

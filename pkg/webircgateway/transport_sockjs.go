@@ -21,7 +21,7 @@ func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
 	client := t.gateway.NewClient()
 
 	originHeader := strings.ToLower(session.Request().Header.Get("Origin"))
-	if !t.gateway.isClientOriginAllowed(originHeader) {
+	if !t.gateway.IsClientOriginAllowed(originHeader) {
 		client.Log(2, "Origin %s not allowed. Closing connection", originHeader)
 		session.Close(0, "Origin not allowed")
 		return
