@@ -55,6 +55,7 @@ func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New sockjs client on %s from %s %s", session.Request().Host, client.RemoteAddr, client.RemoteHostname)
+	client.Ready()
 
 	// Read from sockjs
 	go func() {

@@ -18,6 +18,7 @@ import (
 
 	"sync"
 
+	"github.com/kiwiirc/webircgateway/pkg/dnsbl"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
 )
@@ -154,6 +155,22 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 		label = "->Client"
 	}
 	c.Log(1, fmt.Sprintf("Traffic (%s) %s", label, traffic))
+}
+
+func (c *Client) Ready() {
+	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" {
+		c.checkDnsBl()
+	}
+}
+
+func (c *Client) checkDnsBl() {
+	dnsResult := dnsbl.Lookup(c.Gateway.Config.DnsblServers, c.RemoteAddr)
+	if dnsResult.Listed && c.Gateway.Config.DnsblAction == "deny" {
+		c.StartShutdown("dnsbl")
+	} else if dnsResult.Listed && c.Gateway.Config.DnsblAction == "verify" {
+		c.RequiresVerification = true
+		c.SendClientSignal("data", "CAPCTHA NEEDED")
+	}
 }
 
 func (c *Client) IsShuttingDown() bool {

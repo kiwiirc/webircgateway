@@ -77,6 +77,9 @@ type Config struct {
 	ReCaptchaKey          string
 	Secret                string
 	Plugins               []string
+	DnsblServers          []string
+	// DnsblAction - "deny" = deny the connection. "verify" = require verification
+	DnsblAction string
 }
 
 func NewConfig(gateway *Gateway) *Config {
@@ -147,6 +150,8 @@ func (c *Config) Load() error {
 	c.ClientRealname = ""
 	c.ClientUsername = ""
 	c.ClientHostname = ""
+	c.DnsblServers = []string{}
+	c.DnsblAction = ""
 
 	for _, section := range cfg.Sections() {
 		if strings.Index(section.Name(), "DEFAULT") == 0 {
@@ -174,6 +179,16 @@ func (c *Config) Load() error {
 			if captchaSecret != "" && captchaKey != "" {
 				c.RequiresVerification = true
 				c.ReCaptchaSecret = captchaSecret
+			}
+		}
+
+		if section.Name() == "dnsbl" {
+			c.DnsblAction = section.Key("action").MustString("")
+		}
+
+		if section.Name() == "dnsbl.servers" {
+			for _, addr := range section.KeyStrings() {
+				c.DnsblServers = append(c.DnsblServers, addr)
 			}
 		}
 
