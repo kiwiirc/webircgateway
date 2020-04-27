@@ -60,6 +60,7 @@ func (t *TransportKiwiirc) makeChannel(chanID string, ws sockjs.Session) *Transp
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New kiwiirc channel on %s from %s %s", ws.Request().Host, client.RemoteAddr, client.RemoteHostname)
+	client.Ready()
 
 	channel := &TransportKiwiircChannel{
 		Id:           chanID,

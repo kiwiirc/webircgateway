@@ -61,6 +61,7 @@ func (t *TransportTcp) handleConn(conn net.Conn) {
 	client.Tags["remote-port"] = remoteAddrPort
 
 	client.Log(2, "New tcp client on %s from %s %s", conn.LocalAddr().String(), client.RemoteAddr, client.RemoteHostname)
+	client.Ready()
 
 	// We wait until the client send queue has been drained
 	var sendDrained sync.WaitGroup

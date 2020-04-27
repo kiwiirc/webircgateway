@@ -18,6 +18,7 @@ import (
 
 	"sync"
 
+	"github.com/kiwiirc/webircgateway/pkg/dnsbl"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/proxy"
 )
@@ -64,8 +65,9 @@ type Client struct {
 	// Tags get passed upstream via the WEBIRC command
 	Tags map[string]string
 	// Captchas may be needed to verify a client
-	Verified bool
-	SentPass bool
+	RequiresVerification bool
+	Verified             bool
+	SentPass             bool
 	// Signals for the transport to make use of (data, connection state, etc)
 	Signals  chan ClientSignal
 	Features struct {
@@ -102,10 +104,7 @@ func NewClient(gateway *Gateway) *Client {
 	// Auto enable some features by default. They may be disabled later on
 	c.Features.ExtJwt = true
 
-	// Auto verify the client if it's not needed
-	if !gateway.Config.RequiresVerification {
-		c.Verified = true
-	}
+	c.RequiresVerification = gateway.Config.RequiresVerification
 
 	// Handles data to/from the client and upstreams
 	go c.clientLineWorker()
@@ -156,6 +155,29 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 		label = "->Client"
 	}
 	c.Log(1, fmt.Sprintf("Traffic (%s) %s", label, traffic))
+}
+
+func (c *Client) Ready() {
+	dnsblAction := c.Gateway.Config.DnsblAction
+	validAction := dnsblAction == "verify" || dnsblAction == "deny"
+
+	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && validAction {
+		c.checkDnsBl()
+	} else if c.Gateway.Config.RequiresVerification {
+		c.SendClientSignal("data", "CAPTCHA NEEDED")
+	}
+}
+
+func (c *Client) checkDnsBl() {
+	dnsResult := dnsbl.Lookup(c.Gateway.Config.DnsblServers, c.RemoteAddr)
+	if dnsResult.Listed && c.Gateway.Config.DnsblAction == "deny" {
+		c.SendIrcError("Blocked by DNSBL")
+		c.SendClientSignal("state", "closed", "dnsbl_listed")
+		c.StartShutdown("dnsbl")
+	} else if dnsResult.Listed && c.Gateway.Config.DnsblAction == "verify" {
+		c.RequiresVerification = true
+		c.SendClientSignal("data", "CAPTCHA NEEDED")
+	}
 }
 
 func (c *Client) IsShuttingDown() bool {

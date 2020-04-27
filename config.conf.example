@@ -18,6 +18,9 @@ send_quit_on_client_close = "Client closed"
 recaptcha_secret = ""
 recaptcha_key = ""
 
+# If required, a client must always pass a captcha challenge before making an IRC connection
+required = false
+
 [clients]
 # Default username / realname for IRC connections. If disabled it will use
 # the values provided from the IRC client itself.
@@ -111,3 +114,11 @@ throttle = 2
 [gateway.webirc]
 irc.network.org = webirc_password
 irc.network2.org = webirc_password
+
+[dnsbl]
+# "verify" - if the client supports it, tell it to show a captcha
+# "deny" - deny the connection entirely
+action = verify
+
+[dnsbl.servers]
+dnsbl.dronebl.org

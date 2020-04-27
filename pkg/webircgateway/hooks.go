@@ -97,6 +97,25 @@ func (h *HookClientState) Dispatch(eventType string) {
 }
 
 /**
+ * HookClientInit
+ * Dispatched directly after a new Client instance has been created
+ * Types: client.init
+ */
+type HookClientInit struct {
+	Hook
+	Client    *Client
+	Connected bool
+}
+
+func (h *HookClientInit) Dispatch(eventType string) {
+	for _, p := range h.getCallbacks(eventType) {
+		if f, ok := p.(func(*HookClientInit)); ok {
+			f(h)
+		}
+	}
+}
+
+/**
  * HookStatus
  * Dispatched for each line output of the _status HTTP request
  * Types: status.client
