@@ -158,18 +158,22 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 }
 
 func (c *Client) Ready() {
-	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" {
+	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && c.Gateway.Config.DnsblAction != "" {
 		c.checkDnsBl()
+	} else if c.Gateway.Config.RequiresVerification {
+		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
 }
 
 func (c *Client) checkDnsBl() {
 	dnsResult := dnsbl.Lookup(c.Gateway.Config.DnsblServers, c.RemoteAddr)
 	if dnsResult.Listed && c.Gateway.Config.DnsblAction == "deny" {
+		c.SendIrcError("Blocked by DNSBL")
+		c.SendClientSignal("state", "closed", "dnsbl_listed")
 		c.StartShutdown("dnsbl")
 	} else if dnsResult.Listed && c.Gateway.Config.DnsblAction == "verify" {
 		c.RequiresVerification = true
-		c.SendClientSignal("data", "CAPCTHA NEEDED")
+		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
 }
 
