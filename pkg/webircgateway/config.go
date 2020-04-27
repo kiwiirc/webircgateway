@@ -177,7 +177,7 @@ func (c *Config) Load() error {
 			captchaSecret := section.Key("recaptcha_secret").MustString("")
 			captchaKey := section.Key("recaptcha_key").MustString("")
 			if captchaSecret != "" && captchaKey != "" {
-				c.RequiresVerification = section.Key("enabled").MustBool(false)
+				c.RequiresVerification = section.Key("required").MustBool(false)
 				c.ReCaptchaSecret = captchaSecret
 			}
 		}
