@@ -197,6 +197,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 
 		if !verified {
 			c.SendIrcError("Invalid captcha")
+			c.SendClientSignal("state", "closed", "bad_captcha")
 			c.StartShutdown("unverifed")
 		} else {
 			c.Verified = true
