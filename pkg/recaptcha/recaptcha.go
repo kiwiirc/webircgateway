@@ -13,6 +13,7 @@ import (
 // R type represents an object of Recaptcha and has public property Secret,
 // which is secret obtained from google recaptcha tool admin interface
 type R struct {
+	URL       string
 	Secret    string
 	lastError []string
 }
@@ -23,15 +24,12 @@ type googleResponse struct {
 	ErrorCodes []string `json:"error-codes"`
 }
 
-// url to post submitted re-captcha response to
-var postURL = "https://www.google.com/recaptcha/api/siteverify"
-
 // VerifyResponse is a method similar to `Verify`; but doesn't parse the form for you.  Useful if
 // you're receiving the data as a JSON object from a javascript app or similar.
 func (r *R) VerifyResponse(response string) bool {
 	r.lastError = make([]string, 1)
 	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.PostForm(postURL,
+	resp, err := client.PostForm(r.URL,
 		url.Values{"secret": {r.Secret}, "response": {response}})
 	if err != nil {
 		r.lastError = append(r.lastError, err.Error())

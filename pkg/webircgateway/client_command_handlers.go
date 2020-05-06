@@ -189,6 +189,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		verified := false
 		if len(message.Params) >= 1 {
 			captcha := recaptcha.R{
+				URL:    c.Gateway.Config.ReCaptchaURL,
 				Secret: c.Gateway.Config.ReCaptchaSecret,
 			}
 
