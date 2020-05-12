@@ -92,5 +92,9 @@ func (t *TransportSockjs) sessionHandler(session sockjs.Session) {
 			client.Log(1, "->ws: %s", line)
 			session.Send(line)
 		}
+
+		if signal[0] == "state" && signal[1] == "closed" {
+			session.Close(0, "Closed")
+		}
 	}
 }

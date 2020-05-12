@@ -115,6 +115,10 @@ func (t *TransportWebsocket) websocketHandler(ws *websocket.Conn) {
 			client.Log(1, "->ws: %s", line)
 			ws.Write([]byte(line))
 		}
+
+		if signal[0] == "state" && signal[1] == "closed" {
+			ws.Close()
+		}
 	}
 
 	sendDrained.Wait()
