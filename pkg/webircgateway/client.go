@@ -115,10 +115,10 @@ func NewClient(gateway *Gateway) *Client {
 	// Add to the clients maps and wait until everything has been marked
 	// as completed (several routines add themselves to EndWG so that we can catch
 	// when they are all completed)
-	gateway.Clients.Set(string(c.Id), c)
+	gateway.Clients.Set(strconv.FormatUint(c.Id, 10), c)
 	go func() {
 		c.EndWG.Wait()
-		gateway.Clients.Remove(string(c.Id))
+		gateway.Clients.Remove(strconv.FormatUint(c.Id, 10))
 
 		hook := &HookClientState{
 			Client:    c,
