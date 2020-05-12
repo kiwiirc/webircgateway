@@ -34,6 +34,7 @@ type Gateway struct {
 	httpSrvs    []*http.Server
 	httpSrvsMu  sync.Mutex
 	closeWg     sync.WaitGroup
+	Script      *ScriptRunner
 }
 
 func NewGateway(function string) *Gateway {
@@ -47,7 +48,25 @@ func NewGateway(function string) *Gateway {
 	// Clients hold a map lookup for all the connected clients
 	s.Clients = cmap.New()
 	s.Acme = NewLetsEncryptManager(s)
+	s.Script = NewScriptRunner(s)
 
+	// TODO: Move this .LoadScript() to a configurable path to a .lua script file
+	s.Script.LoadScript(`
+	function onNewClient(client)
+		print("onNewClient() Id: " .. client.Id)
+		print("onNewClient() RequiresVerification: " .. tostring(client.RequiresVerification))
+
+		-- A new client connected and is ready to go. We can now write some simple lua script to
+		-- handle this client to accept, reject, redirect it to a specific upstream, etc.
+
+		-- Require this client to use a captcha
+		client.RequiresVerification = true
+
+		-- Send an error and close the client connection
+		client_write(client.Id, "ERROR :some data from lua for '" .. client.Id .."'")
+		client_close(client.Id, "justbecause")
+	end
+	`)
 	return s
 }
 

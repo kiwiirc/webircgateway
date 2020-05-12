@@ -166,6 +166,17 @@ func (c *Client) Ready() {
 	} else if c.Gateway.Config.RequiresVerification {
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
+
+	/*
+		eventObj := &struct {
+			Id string
+		}{
+			Id: strconv.FormatUint(c.Id, 10),
+		}
+	*/
+	c.RequiresVerification = false
+	c.Gateway.Script.Run("onNewClient", c)
+	println("c.RequiresVerification = ", c.RequiresVerification)
 }
 
 func (c *Client) checkDnsBl() {
