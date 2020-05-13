@@ -57,18 +57,23 @@ func NewGateway(function string) *Gateway {
 		local client = get_client(event.ClientId)
 		print("onNewClient() Id: " .. event.ClientId)
 
-		print("Disabling ExtJwt feature")
-		client.Features.ExtJwt = false
-
 		-- A new client connected and is ready to go. We can now write some simple lua script to
 		-- handle this client to accept, reject, redirect it to a specific upstream, etc.
 
+		-- Adjust the client features
+		-- client.Features.ExtJwt = false
+
 		-- Require this client to use a captcha
-		client.RequiresVerification = true
+		-- client.RequiresVerification = true
 
 		-- Send an error and close the client connection
-		client_write(event.ClientId, "ERROR :some data from lua for '" .. event.ClientId .."'")
-		client_close(event.ClientId, "justbecause")
+		-- client_write(event.ClientId, "ERROR :some data from lua for '" .. event.ClientId .."'")
+		-- client_close(event.ClientId, "justbecause")
+	end
+
+	function onIrcLine(event) 
+		local l = event.ToServer and "[c] " or "[s] "
+		print(l .. event.Line)
 	end
 	`)
 	return s

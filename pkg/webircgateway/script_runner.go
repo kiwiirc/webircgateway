@@ -97,6 +97,10 @@ func (runner *ScriptRunner) AttachHooks() {
 
 		runner.Run("onClientReady", eventObj)
 	})
+
+	HookRegister("irc.line", func(hook *HookIrcLine) {
+		runner.Run("onIrcLine", hook)
+	})
 }
 
 func (runner *ScriptRunner) runnerFuncGetClient(L *lua.State) int {
