@@ -1,9 +1,11 @@
 package webircgateway
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/aarzilli/golua/lua"
+	"github.com/stevedonovan/luar"
 )
 
 // ScriptRunner - Execute embedded Lua scripts
@@ -17,11 +19,14 @@ type ScriptRunner struct {
 func NewScriptRunner(g *Gateway) *ScriptRunner {
 	runner := &ScriptRunner{}
 	runner.gateway = g
-	runner.L = lua.NewState()
+	runner.L = luar.Init()
 	runner.L.OpenLibs()
 
-	runner.L.Register("client_write", runner.runnerFuncClientWrite)
-	runner.L.Register("client_close", runner.runnerFuncClientClose)
+	luar.Register(runner.L, "", luar.Map{
+		"client_write": runner.runnerFuncClientWrite,
+		"client_close": runner.runnerFuncClientClose,
+		"get_client":   runner.runnerFuncGetClient,
+	})
 
 	return runner
 }
@@ -46,15 +51,68 @@ func (runner *ScriptRunner) Run(fnName string, eventObj interface{}) error {
 	runner.Lock()
 	defer runner.Unlock()
 
-	runner.L.GetGlobal(fnName)
-	runner.L.PushGoStruct(eventObj)
-	scriptCallErr := runner.L.Call(1, 0)
+	f := luar.NewLuaObjectFromName(runner.L, fnName)
+	scriptCallErr := f.Call(nil, eventObj)
+	f.Close()
 
 	if scriptCallErr != nil {
-		println("Script error:", scriptCallErr.Error())
+		println("Script error ("+fnName+"):", scriptCallErr.Error())
 	}
 
 	return scriptCallErr
+}
+
+func (runner *ScriptRunner) AttachHooks() {
+	HookRegister("irc.connection.pre", func(hook *HookIrcConnectionPre) {
+		eventObj := &struct {
+			ClientId string
+			Upstream *ConfigUpstream
+		}{
+			ClientId: strconv.FormatUint(hook.Client.Id, 10),
+			Upstream: hook.UpstreamConfig,
+		}
+
+		runner.Run("onIrcConnectionPre", eventObj)
+	})
+
+	HookRegister("client.state", func(hook *HookClientState) {
+		eventObj := &struct {
+			ClientId  string
+			Connected bool
+		}{
+			ClientId:  strconv.FormatUint(hook.Client.Id, 10),
+			Connected: hook.Connected,
+		}
+
+		runner.Run("onClientState", eventObj)
+	})
+
+	HookRegister("client.ready", func(hook *HookClientReady) {
+		eventObj := &struct {
+			ClientId string
+		}{
+			ClientId: strconv.FormatUint(hook.Client.Id, 10),
+		}
+
+		runner.Run("onClientReady", eventObj)
+	})
+}
+
+func (runner *ScriptRunner) runnerFuncGetClient(L *lua.State) int {
+	clientId := L.ToString(1)
+
+	if clientId == "" {
+		return 0
+	}
+
+	c, isOk := runner.gateway.Clients.Get(clientId)
+	if !isOk {
+		return 0
+	}
+
+	client := c.(*Client)
+	luar.GoToLuaProxy(runner.L, client)
+	return 1
 }
 
 func (runner *ScriptRunner) runnerFuncClientWrite(L *lua.State) int {

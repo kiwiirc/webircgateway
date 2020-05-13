@@ -158,25 +158,25 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 }
 
 func (c *Client) Ready() {
+	hook := &HookClientReady{
+		Client: c,
+	}
+
+	hook.Dispatch("client.ready")
+	if hook.Halt {
+		c.SendClientSignal("state", "closed", "err_forbidden")
+		c.StartShutdown("err_refused")
+		return
+	}
+
 	dnsblAction := c.Gateway.Config.DnsblAction
 	validAction := dnsblAction == "verify" || dnsblAction == "deny"
 
-	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && validAction {
+	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && !c.Verified && validAction {
 		c.checkDnsBl()
-	} else if c.Gateway.Config.RequiresVerification {
+	} else if c.Gateway.Config.RequiresVerification && !c.Verified {
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
-
-	/*
-		eventObj := &struct {
-			Id string
-		}{
-			Id: strconv.FormatUint(c.Id, 10),
-		}
-	*/
-	c.RequiresVerification = false
-	c.Gateway.Script.Run("onNewClient", c)
-	println("c.RequiresVerification = ", c.RequiresVerification)
 }
 
 func (c *Client) checkDnsBl() {

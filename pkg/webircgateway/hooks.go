@@ -79,7 +79,7 @@ func (h *HookIrcLine) Dispatch(eventType string) {
 
 /**
  * HookClientState
- * Dispatched after a client connects or disconnects
+ * Dispatched after a client is first created or disconnects
  * Types: client.state
  */
 type HookClientState struct {
@@ -97,19 +97,18 @@ func (h *HookClientState) Dispatch(eventType string) {
 }
 
 /**
- * HookClientInit
+ * HookClientReady
  * Dispatched directly after a new Client instance has been created
- * Types: client.init
+ * Types: client.ready
  */
-type HookClientInit struct {
+type HookClientReady struct {
 	Hook
-	Client    *Client
-	Connected bool
+	Client *Client
 }
 
-func (h *HookClientInit) Dispatch(eventType string) {
+func (h *HookClientReady) Dispatch(eventType string) {
 	for _, p := range h.getCallbacks(eventType) {
-		if f, ok := p.(func(*HookClientInit)); ok {
+		if f, ok := p.(func(*HookClientReady)); ok {
 			f(h)
 		}
 	}

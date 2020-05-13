@@ -49,12 +49,16 @@ func NewGateway(function string) *Gateway {
 	s.Clients = cmap.New()
 	s.Acme = NewLetsEncryptManager(s)
 	s.Script = NewScriptRunner(s)
+	s.Script.AttachHooks()
 
 	// TODO: Move this .LoadScript() to a configurable path to a .lua script file
 	s.Script.LoadScript(`
-	function onNewClient(client)
-		print("onNewClient() Id: " .. client.Id)
-		print("onNewClient() RequiresVerification: " .. tostring(client.RequiresVerification))
+	function onClientReady(event)
+		local client = get_client(event.ClientId)
+		print("onNewClient() Id: " .. event.ClientId)
+
+		print("Disabling ExtJwt feature")
+		client.Features.ExtJwt = false
 
 		-- A new client connected and is ready to go. We can now write some simple lua script to
 		-- handle this client to accept, reject, redirect it to a specific upstream, etc.
@@ -63,8 +67,8 @@ func NewGateway(function string) *Gateway {
 		client.RequiresVerification = true
 
 		-- Send an error and close the client connection
-		client_write(client.Id, "ERROR :some data from lua for '" .. client.Id .."'")
-		client_close(client.Id, "justbecause")
+		client_write(event.ClientId, "ERROR :some data from lua for '" .. event.ClientId .."'")
+		client_close(event.ClientId, "justbecause")
 	end
 	`)
 	return s
