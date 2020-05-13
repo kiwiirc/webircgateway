@@ -78,6 +78,14 @@ func (runner *ScriptRunner) AttachHooks() {
 	HookRegister("irc.line", func(hook *HookIrcLine) {
 		runner.Run("onIrcLine", hook)
 	})
+
+	HookRegister("status.client", func(hook *HookStatus) {
+		runner.Run("onStatusClient", hook)
+	})
+
+	HookRegister("gateway.closing", func(hook *HookGatewayClosing) {
+		runner.Run("onGatewayCLosing", hook)
+	})
 }
 
 func (runner *ScriptRunner) runnerFuncGetClient(L *lua.State) int {
