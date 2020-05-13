@@ -55,7 +55,8 @@ func (runner *ScriptRunner) Run(fnName string, eventObj interface{}) error {
 	scriptCallErr := f.Call(nil, eventObj)
 	f.Close()
 
-	if scriptCallErr != nil {
+	// ErrLuaObjectCallable = "LuaObject must be callable" - The function doesn't exist
+	if scriptCallErr != nil && scriptCallErr != luar.ErrLuaObjectCallable {
 		println("Script error ("+fnName+"):", scriptCallErr.Error())
 	}
 
