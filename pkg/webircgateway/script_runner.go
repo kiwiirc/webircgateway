@@ -1,7 +1,6 @@
 package webircgateway
 
 import (
-	"strconv"
 	"sync"
 
 	"github.com/aarzilli/golua/lua"
@@ -65,37 +64,15 @@ func (runner *ScriptRunner) Run(fnName string, eventObj interface{}) error {
 
 func (runner *ScriptRunner) AttachHooks() {
 	HookRegister("irc.connection.pre", func(hook *HookIrcConnectionPre) {
-		eventObj := &struct {
-			ClientId string
-			Upstream *ConfigUpstream
-		}{
-			ClientId: strconv.FormatUint(hook.Client.Id, 10),
-			Upstream: hook.UpstreamConfig,
-		}
-
-		runner.Run("onIrcConnectionPre", eventObj)
+		runner.Run("onIrcConnectionPre", hook)
 	})
 
 	HookRegister("client.state", func(hook *HookClientState) {
-		eventObj := &struct {
-			ClientId  string
-			Connected bool
-		}{
-			ClientId:  strconv.FormatUint(hook.Client.Id, 10),
-			Connected: hook.Connected,
-		}
-
-		runner.Run("onClientState", eventObj)
+		runner.Run("onClientState", hook)
 	})
 
 	HookRegister("client.ready", func(hook *HookClientReady) {
-		eventObj := &struct {
-			ClientId string
-		}{
-			ClientId: strconv.FormatUint(hook.Client.Id, 10),
-		}
-
-		runner.Run("onClientReady", eventObj)
+		runner.Run("onClientReady", hook)
 	})
 
 	HookRegister("irc.line", func(hook *HookIrcLine) {
