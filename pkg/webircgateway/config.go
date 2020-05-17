@@ -67,6 +67,7 @@ type Config struct {
 	RemoteOrigins         []glob.Glob
 	ReverseProxies        []net.IPNet
 	Webroot               string
+	KiwiircConfig         string
 	ClientRealname        string
 	ClientUsername        string
 	ClientHostname        string
@@ -142,6 +143,7 @@ func (c *Config) Load() error {
 	c.GatewayWhitelist = []glob.Glob{}
 	c.ReverseProxies = []net.IPNet{}
 	c.Webroot = ""
+	c.KiwiircConfig = ""
 	c.ReCaptchaSecret = ""
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
@@ -213,6 +215,7 @@ func (c *Config) Load() error {
 		if strings.Index(section.Name(), "fileserving") == 0 {
 			if section.Key("enabled").MustBool(false) {
 				c.Webroot = section.Key("webroot").MustString("")
+				c.KiwiircConfig = section.Key("kiwiirc_config").MustString("")
 			}
 		}
 
