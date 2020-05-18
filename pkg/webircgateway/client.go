@@ -160,10 +160,13 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 func (c *Client) Ready() {
 	dnsblAction := c.Gateway.Config.DnsblAction
 	validAction := dnsblAction == "verify" || dnsblAction == "deny"
+	dnsblTookAction := ""
 
-	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && validAction {
-		c.checkDnsBl()
-	} else if c.Gateway.Config.RequiresVerification {
+	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && !c.Verified && validAction {
+		dnsblTookAction = c.checkDnsBl()
+	}
+
+	if dnsblTookAction == "" && c.Gateway.Config.RequiresVerification && !c.Verified {
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
 }
