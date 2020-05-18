@@ -171,16 +171,20 @@ func (c *Client) Ready() {
 	}
 }
 
-func (c *Client) checkDnsBl() {
+func (c *Client) checkDnsBl() (tookAction string) {
 	dnsResult := dnsbl.Lookup(c.Gateway.Config.DnsblServers, c.RemoteAddr)
 	if dnsResult.Listed && c.Gateway.Config.DnsblAction == "deny" {
 		c.SendIrcError("Blocked by DNSBL")
 		c.SendClientSignal("state", "closed", "dnsbl_listed")
 		c.StartShutdown("dnsbl")
+		tookAction = "deny"
 	} else if dnsResult.Listed && c.Gateway.Config.DnsblAction == "verify" {
 		c.RequiresVerification = true
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
+		tookAction = "verify"
 	}
+
+	return
 }
 
 func (c *Client) IsShuttingDown() bool {
