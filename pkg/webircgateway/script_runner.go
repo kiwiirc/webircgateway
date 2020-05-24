@@ -2,22 +2,44 @@ package webircgateway
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/aarzilli/golua/lua"
 	"github.com/stevedonovan/luar"
 )
 
+type ScriptRunnerWorker struct {
+	locked uint32
+	L      *lua.State
+}
+
+func (worker *ScriptRunnerWorker) lockIfAvailable() bool {
+	if !atomic.CompareAndSwapUint32(&worker.locked, 0, 1) {
+		return true
+	}
+	defer atomic.StoreUint32(&worker.locked, 0)
+	return false
+}
+
 // ScriptRunner - Execute embedded Lua scripts
 type ScriptRunner struct {
 	gateway *Gateway
 	sync.Mutex
-	L *lua.State
+	workers []*ScriptRunnerWorker
+	L       *lua.State
 }
 
 // NewScriptRunner - Create a new ScriptRunner
-func NewScriptRunner(g *Gateway) *ScriptRunner {
+func NewScriptRunner(g *Gateway, numWorkers int) *ScriptRunner {
 	runner := &ScriptRunner{}
 	runner.gateway = g
+
+	for i := 0; i < numWorkers; i++ {
+		worker := &ScriptRunnerWorker{}
+		worker.L = luar.Init()
+		worker.L.OpenLibs()
+		runner.workers = append(runner.workers, worker)
+	}
 	runner.L = luar.Init()
 	runner.L.OpenLibs()
 
