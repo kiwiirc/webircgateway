@@ -13,7 +13,7 @@ import (
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
-var VERSION = "1.0.1"
+var VERSION = "1.1.0"
 var GITCOMMIT = "-"
 var BUILTWITHGO = "-"
 
