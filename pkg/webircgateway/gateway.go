@@ -48,14 +48,19 @@ func NewGateway(function string) *Gateway {
 	// Clients hold a map lookup for all the connected clients
 	s.Clients = cmap.New()
 	s.Acme = NewLetsEncryptManager(s)
-	s.Script = NewScriptRunner(s)
+	s.Script = NewScriptRunner(s, 3)
 	s.Script.AttachHooks()
 
 	// TODO: Move this .LoadScript() to a configurable path to a .lua script file
 	s.Script.LoadScript(`
+	function onClientState(event)
+		local client = get_client(event.Client.Id)
+		print("onClientState() Id: " .. event.Client.Id .. " new state: " .. event.Client.State)
+	end
+
 	function onClientReady(event)
-		local client = get_client(event.ClientId)
-		print("onNewClient() Id: " .. event.ClientId)
+		local client = get_client(event.Client.Id)
+		print("onClientReady() Id: " .. event.Client.Id)
 
 		-- A new client connected and is ready to go. We can now write some simple lua script to
 		-- handle this client to accept, reject, redirect it to a specific upstream, etc.
@@ -67,8 +72,8 @@ func NewGateway(function string) *Gateway {
 		-- client.RequiresVerification = true
 
 		-- Send an error and close the client connection
-		-- client_write(event.ClientId, "ERROR :some data from lua for '" .. event.ClientId .."'")
-		-- client_close(event.ClientId, "justbecause")
+		-- client_write(event.Client.Id, "ERROR :some data from lua for '" .. event.Client.Id .."'")
+		-- client_close(event.Client.Id, "justbecause")
 	end
 
 	function onIrcLine(event) 
@@ -113,12 +118,10 @@ func (s *Gateway) Start() {
 func (s *Gateway) Close() {
 	hook := HookGatewayClosing{}
 	hook.Dispatch("gateway.closing")
-
 	defer s.closeWg.Done()
 
 	s.httpSrvsMu.Lock()
 	defer s.httpSrvsMu.Unlock()
-
 	for _, httpSrv := range s.httpSrvs {
 		httpSrv.Close()
 	}

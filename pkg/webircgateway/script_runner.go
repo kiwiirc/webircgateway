@@ -1,53 +1,83 @@
 package webircgateway
 
 import (
+	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/aarzilli/golua/lua"
 	"github.com/stevedonovan/luar"
 )
 
-type ScriptRunnerWorker struct {
-	locked uint32
-	L      *lua.State
+type ScriptRunnerWorkerJob struct {
+	fnName   string
+	eventObj interface{}
+	w        sync.WaitGroup
 }
 
-func (worker *ScriptRunnerWorker) lockIfAvailable() bool {
-	if !atomic.CompareAndSwapUint32(&worker.locked, 0, 1) {
-		return true
+type ScriptRunnerWorker struct {
+	ID string
+	L  *lua.State
+}
+
+func NewScriptRunnerWorker(id string, queue chan *ScriptRunnerWorkerJob) *ScriptRunnerWorker {
+	worker := &ScriptRunnerWorker{}
+	worker.ID = id
+	worker.L = luar.Init()
+	worker.L.OpenLibs()
+	go worker.Run(queue)
+	return worker
+}
+
+func (worker *ScriptRunnerWorker) Run(queue chan *ScriptRunnerWorkerJob) {
+	for {
+		job := <-queue
+		if job == nil {
+			break
+		}
+
+		fnObj := luar.NewLuaObjectFromName(worker.L, job.fnName)
+		scriptCallErr := fnObj.Call(nil, job.eventObj)
+		fnObj.Close()
+
+		if scriptCallErr != nil && scriptCallErr != luar.ErrLuaObjectCallable {
+			println("Script error ("+job.fnName+"):", scriptCallErr.Error())
+		}
+		job.w.Done()
 	}
-	defer atomic.StoreUint32(&worker.locked, 0)
-	return false
 }
 
 // ScriptRunner - Execute embedded Lua scripts
 type ScriptRunner struct {
 	gateway *Gateway
 	sync.Mutex
+	queue   chan *ScriptRunnerWorkerJob
 	workers []*ScriptRunnerWorker
-	L       *lua.State
 }
 
 // NewScriptRunner - Create a new ScriptRunner
 func NewScriptRunner(g *Gateway, numWorkers int) *ScriptRunner {
 	runner := &ScriptRunner{}
 	runner.gateway = g
+	runner.queue = make(chan *ScriptRunnerWorkerJob)
 
 	for i := 0; i < numWorkers; i++ {
-		worker := &ScriptRunnerWorker{}
-		worker.L = luar.Init()
-		worker.L.OpenLibs()
+		workerID := "scriptworker" + strconv.Itoa(i)
+		worker := NewScriptRunnerWorker(workerID, runner.queue)
+		luar.Register(worker.L, "", luar.Map{
+			"client_write": runner.runnerFuncClientWrite,
+			"client_close": runner.runnerFuncClientClose,
+			"get_client":   runner.runnerFuncGetClient,
+			"print": func(args ...interface{}) {
+				// Override luas default print function with ours that has more context
+				var p []interface{}
+				p = append(p, workerID)
+				p = append(p, args...)
+				g.Log(2, "%s: %s", p...)
+			},
+		})
+
 		runner.workers = append(runner.workers, worker)
 	}
-	runner.L = luar.Init()
-	runner.L.OpenLibs()
-
-	luar.Register(runner.L, "", luar.Map{
-		"client_write": runner.runnerFuncClientWrite,
-		"client_close": runner.runnerFuncClientClose,
-		"get_client":   runner.runnerFuncGetClient,
-	})
 
 	return runner
 }
@@ -56,15 +86,19 @@ func NewScriptRunner(g *Gateway, numWorkers int) *ScriptRunner {
 func (runner *ScriptRunner) LoadScript(script string) error {
 	// TODO: Create a new fresh state
 
+	var lastErr error
+
 	// May need to run: eval $(luarocks path --lua-version 5.1 --bin)
 	// https://github.com/luarocks/luarocks/wiki/Using-LuaRocks
-	scriptErr := runner.L.DoString(script)
-
-	if scriptErr != nil {
-		println("Error loading script error:", scriptErr.Error())
+	for _, worker := range runner.workers {
+		scriptErr := worker.L.DoString(script)
+		if scriptErr != nil {
+			runner.gateway.Log(3, "Worker %s error loading script: %s", worker.ID, scriptErr.Error())
+			lastErr = scriptErr
+		}
 	}
 
-	return scriptErr
+	return lastErr
 }
 
 // Run - Run a global function with an event object
@@ -72,18 +106,18 @@ func (runner *ScriptRunner) Run(fnName string, eventObj interface{}) error {
 	runner.Lock()
 	defer runner.Unlock()
 
-	f := luar.NewLuaObjectFromName(runner.L, fnName)
-	scriptCallErr := f.Call(nil, eventObj)
-	f.Close()
+	job := &ScriptRunnerWorkerJob{}
+	job.eventObj = eventObj
+	job.fnName = fnName
 
-	// ErrLuaObjectCallable = "LuaObject must be callable" - The function doesn't exist
-	if scriptCallErr != nil && scriptCallErr != luar.ErrLuaObjectCallable {
-		println("Script error ("+fnName+"):", scriptCallErr.Error())
-	}
+	job.w.Add(1)
+	runner.queue <- job
+	job.w.Wait()
 
-	return scriptCallErr
+	return nil
 }
 
+// AttachHooks attaches all gateway hooks into script runners
 func (runner *ScriptRunner) AttachHooks() {
 	HookRegister("irc.connection.pre", func(hook *HookIrcConnectionPre) {
 		runner.Run("onIrcConnectionPre", hook)
@@ -110,20 +144,23 @@ func (runner *ScriptRunner) AttachHooks() {
 	})
 }
 
+/**
+ * Functions available to the lua script
+ */
 func (runner *ScriptRunner) runnerFuncGetClient(L *lua.State) int {
-	clientId := L.ToString(1)
+	clientID := L.ToString(1)
 
-	if clientId == "" {
+	if clientID == "" {
 		return 0
 	}
 
-	c, isOk := runner.gateway.Clients.Get(clientId)
+	c, isOk := runner.gateway.Clients.Get(clientID)
 	if !isOk {
 		return 0
 	}
 
 	client := c.(*Client)
-	luar.GoToLuaProxy(runner.L, client)
+	luar.GoToLuaProxy(L, client)
 	return 1
 }
 
@@ -146,14 +183,14 @@ func (runner *ScriptRunner) runnerFuncClientWrite(L *lua.State) int {
 }
 
 func (runner *ScriptRunner) runnerFuncClientClose(L *lua.State) int {
-	clientId := L.ToString(1)
+	clientID := L.ToString(1)
 	reason := L.ToString(2)
 
-	if clientId == "" || reason == "" {
+	if clientID == "" || reason == "" {
 		return 0
 	}
 
-	c, isOk := runner.gateway.Clients.Get(clientId)
+	c, isOk := runner.gateway.Clients.Get(clientID)
 	if !isOk {
 		return 0
 	}
