@@ -18,11 +18,13 @@ type ScriptRunnerWorker struct {
 	ID      string
 	L       *lua.State
 	NumRuns int64
+	EndChan chan struct{}
 }
 
 func NewScriptRunnerWorker(id string, queue chan *ScriptRunnerWorkerJob) *ScriptRunnerWorker {
 	worker := &ScriptRunnerWorker{}
 	worker.ID = id
+	worker.EndChan = make(chan struct{})
 	worker.L = luar.Init()
 	worker.L.OpenLibs()
 	go worker.Run(queue)
@@ -31,7 +33,14 @@ func NewScriptRunnerWorker(id string, queue chan *ScriptRunnerWorkerJob) *Script
 
 func (worker *ScriptRunnerWorker) Run(queue chan *ScriptRunnerWorkerJob) {
 	for {
-		job := <-queue
+		var job *ScriptRunnerWorkerJob
+
+		select {
+		case <-worker.EndChan:
+			break
+		case job = <-queue:
+		}
+
 		if job == nil {
 			break
 		}
@@ -57,11 +66,20 @@ type ScriptRunner struct {
 }
 
 // NewScriptRunner - Create a new ScriptRunner
-func NewScriptRunner(g *Gateway, numWorkers int) *ScriptRunner {
+func NewScriptRunner(g *Gateway) *ScriptRunner {
 	runner := &ScriptRunner{}
 	runner.gateway = g
 	runner.queue = make(chan *ScriptRunnerWorkerJob)
+	return runner
+}
 
+func (runner *ScriptRunner) StartWorkers(numWorkers int) {
+	// Tell any existing workers to stop running after their completed jobs
+	for _, worker := range runner.workers {
+		close(worker.EndChan)
+	}
+
+	// Now create the new workers
 	for i := 0; i < numWorkers; i++ {
 		workerID := "scriptworker" + strconv.Itoa(i)
 		worker := NewScriptRunnerWorker(workerID, runner.queue)
@@ -74,14 +92,12 @@ func NewScriptRunner(g *Gateway, numWorkers int) *ScriptRunner {
 				var p []interface{}
 				p = append(p, workerID)
 				p = append(p, args...)
-				g.Log(2, "%s: %s", p...)
+				runner.gateway.Log(2, "%s: %s", p...)
 			},
 		})
 
 		runner.workers = append(runner.workers, worker)
 	}
-
-	return runner
 }
 
 // LoadScript - Load a new script into the runner

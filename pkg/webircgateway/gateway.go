@@ -74,7 +74,7 @@ func (s *Gateway) Start() {
 		s.maybeStartStaticFileServer()
 		s.initHttpRoutes()
 		s.maybeStartIdentd()
-		s.initScript()
+		s.loadScripting()
 
 		for _, serverConfig := range s.Config.Servers {
 			go s.startServer(serverConfig)
@@ -84,6 +84,12 @@ func (s *Gateway) Start() {
 	if s.Function == "proxy" {
 		proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
 	}
+}
+
+// Reload reloads the config file and as many internal things we can. Currently only scripting.
+func (s *Gateway) Reload() {
+	s.Config.Load()
+	s.loadScripting()
 }
 
 func (s *Gateway) Close() {
@@ -184,7 +190,7 @@ func (s *Gateway) initHttpRoutes() error {
 	return nil
 }
 
-func (s *Gateway) initScript() {
+func (s *Gateway) loadScripting() {
 	scriptPath := s.Config.ResolvePath(s.Config.LuaScript)
 	if s.Config.LuaWorkers <= 0 || scriptPath == "" {
 		return
@@ -192,7 +198,11 @@ func (s *Gateway) initScript() {
 
 	s.Log(2, "Starting %d script workers", s.Config.LuaWorkers)
 
-	s.Script = NewScriptRunner(s, s.Config.LuaWorkers)
+	if s.Script == nil {
+		s.Script = NewScriptRunner(s)
+	}
+
+	s.Script.StartWorkers(s.Config.LuaWorkers)
 	s.Script.AttachHooks()
 
 	scriptContent, readErr := ioutil.ReadFile(scriptPath)

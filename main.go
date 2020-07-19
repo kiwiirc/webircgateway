@@ -81,8 +81,8 @@ func watchForSignals(gateway *webircgateway.Gateway) {
 			fmt.Println("Received SIGINT, shutting down webircgateway")
 			gateway.Close()
 		case syscall.SIGHUP:
-			fmt.Println("Recieved SIGHUP, reloading config file")
-			gateway.Config.Load()
+			fmt.Println("Recieved SIGHUP, reloading")
+			gateway.Reload()
 		}
 	}
 }
