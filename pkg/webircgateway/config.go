@@ -75,6 +75,7 @@ type Config struct {
 	Identd                bool
 	RequiresVerification  bool
 	SendQuitOnClientClose string
+	ReCaptchaURL          string
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
@@ -150,6 +151,7 @@ func (c *Config) Load() error {
 	c.Webroot = ""
 	c.LuaScript = ""
 	c.LuaWorkers = 3
+	c.ReCaptchaURL = ""
 	c.ReCaptchaSecret = ""
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
@@ -188,6 +190,7 @@ func (c *Config) Load() error {
 				c.RequiresVerification = section.Key("required").MustBool(false)
 				c.ReCaptchaSecret = captchaSecret
 			}
+			c.ReCaptchaURL = section.Key("recaptcha_url").MustString("https://www.google.com/recaptcha/api/siteverify")
 		}
 
 		if section.Name() == "dnsbl" {

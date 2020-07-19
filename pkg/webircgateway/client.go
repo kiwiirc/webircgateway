@@ -174,24 +174,31 @@ func (c *Client) Ready() {
 
 	dnsblAction := c.Gateway.Config.DnsblAction
 	validAction := dnsblAction == "verify" || dnsblAction == "deny"
+	dnsblTookAction := ""
 
 	if len(c.Gateway.Config.DnsblServers) > 0 && c.RemoteAddr != "" && !c.Verified && validAction {
-		c.checkDnsBl()
-	} else if c.Gateway.Config.RequiresVerification && !c.Verified {
+		dnsblTookAction = c.checkDnsBl()
+	}
+
+	if dnsblTookAction == "" && c.Gateway.Config.RequiresVerification && !c.Verified {
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
 	}
 }
 
-func (c *Client) checkDnsBl() {
+func (c *Client) checkDnsBl() (tookAction string) {
 	dnsResult := dnsbl.Lookup(c.Gateway.Config.DnsblServers, c.RemoteAddr)
 	if dnsResult.Listed && c.Gateway.Config.DnsblAction == "deny" {
 		c.SendIrcError("Blocked by DNSBL")
 		c.SendClientSignal("state", "closed", "dnsbl_listed")
 		c.StartShutdown("dnsbl")
+		tookAction = "deny"
 	} else if dnsResult.Listed && c.Gateway.Config.DnsblAction == "verify" {
 		c.RequiresVerification = true
 		c.SendClientSignal("data", "CAPTCHA NEEDED")
+		tookAction = "verify"
 	}
+
+	return
 }
 
 func (c *Client) IsShuttingDown() bool {
