@@ -15,8 +15,9 @@ type ScriptRunnerWorkerJob struct {
 }
 
 type ScriptRunnerWorker struct {
-	ID string
-	L  *lua.State
+	ID      string
+	L       *lua.State
+	NumRuns int64
 }
 
 func NewScriptRunnerWorker(id string, queue chan *ScriptRunnerWorkerJob) *ScriptRunnerWorker {
@@ -43,6 +44,7 @@ func (worker *ScriptRunnerWorker) Run(queue chan *ScriptRunnerWorkerJob) {
 			println("Script error ("+job.fnName+"):", scriptCallErr.Error())
 		}
 		job.w.Done()
+		worker.NumRuns++
 	}
 }
 
@@ -103,9 +105,6 @@ func (runner *ScriptRunner) LoadScript(script string) error {
 
 // Run - Run a global function with an event object
 func (runner *ScriptRunner) Run(fnName string, eventObj interface{}) error {
-	runner.Lock()
-	defer runner.Unlock()
-
 	job := &ScriptRunnerWorkerJob{}
 	job.eventObj = eventObj
 	job.fnName = fnName

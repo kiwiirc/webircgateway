@@ -77,6 +77,8 @@ type Client struct {
 	}
 	// The specific message-tags CAP that the client has requested if we are wrapping it
 	RequestedMessageTagsCap string
+	// Data can be added to this client via plugins if they need
+	Data map[string]interface{}
 }
 
 var nextClientID uint64 = 1
@@ -99,6 +101,7 @@ func NewClient(gateway *Gateway) *Client {
 		Tags:           make(map[string]string),
 		IrcState:       irc.NewState(),
 		UpstreamConfig: &ConfigUpstream{},
+		Data:           make(map[string]interface{}),
 	}
 
 	// Auto enable some features by default. They may be disabled later on
