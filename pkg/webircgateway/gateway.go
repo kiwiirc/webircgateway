@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -200,7 +201,12 @@ func (s *Gateway) initScript() {
 		return
 	}
 
-	scriptErr := s.Script.LoadScript(string(scriptContent))
+	// Add the script path to lua package path list
+	packagePath := filepath.Dir(scriptPath)
+	script := "package.path = \"" + packagePath + "/?.lua;\" .. package.path\n"
+	script += string(scriptContent)
+
+	scriptErr := s.Script.LoadScript(script)
 	if scriptErr != nil {
 		s.Log(3, "Error loading script %s %s", scriptPath, scriptErr.Error())
 		return
