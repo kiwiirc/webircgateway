@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -48,39 +49,7 @@ func NewGateway(function string) *Gateway {
 	// Clients hold a map lookup for all the connected clients
 	s.Clients = cmap.New()
 	s.Acme = NewLetsEncryptManager(s)
-	s.Script = NewScriptRunner(s, 3)
-	s.Script.AttachHooks()
 
-	// TODO: Move this .LoadScript() to a configurable path to a .lua script file
-	s.Script.LoadScript(`
-	function onClientState(event)
-		local client = get_client(event.Client.Id)
-		print("onClientState() Id: " .. event.Client.Id .. " new state: " .. event.Client.State)
-	end
-
-	function onClientReady(event)
-		local client = get_client(event.Client.Id)
-		print("onClientReady() Id: " .. event.Client.Id)
-
-		-- A new client connected and is ready to go. We can now write some simple lua script to
-		-- handle this client to accept, reject, redirect it to a specific upstream, etc.
-
-		-- Adjust the client features
-		-- client.Features.ExtJwt = false
-
-		-- Require this client to use a captcha
-		-- client.RequiresVerification = true
-
-		-- Send an error and close the client connection
-		-- client_write(event.Client.Id, "ERROR :some data from lua for '" .. event.Client.Id .."'")
-		-- client_close(event.Client.Id, "justbecause")
-	end
-
-	function onIrcLine(event) 
-		local l = event.ToServer and "[c] " or "[s] "
-		print(l .. event.Line)
-	end
-	`)
 	return s
 }
 
@@ -104,6 +73,7 @@ func (s *Gateway) Start() {
 		s.maybeStartStaticFileServer()
 		s.initHttpRoutes()
 		s.maybeStartIdentd()
+		s.initScript()
 
 		for _, serverConfig := range s.Config.Servers {
 			go s.startServer(serverConfig)
@@ -211,6 +181,30 @@ func (s *Gateway) initHttpRoutes() error {
 	})
 
 	return nil
+}
+
+func (s *Gateway) initScript() {
+	scriptPath := s.Config.ResolvePath(s.Config.LuaScript)
+	if s.Config.LuaWorkers <= 0 || scriptPath == "" {
+		return
+	}
+
+	s.Log(2, "Starting %d script workers", s.Config.LuaWorkers)
+
+	s.Script = NewScriptRunner(s, s.Config.LuaWorkers)
+	s.Script.AttachHooks()
+
+	scriptContent, readErr := ioutil.ReadFile(scriptPath)
+	if readErr != nil {
+		s.Log(3, "Error loading script %s", readErr.Error())
+		return
+	}
+
+	scriptErr := s.Script.LoadScript(string(scriptContent))
+	if scriptErr != nil {
+		s.Log(3, "Error loading script %s %s", scriptPath, scriptErr.Error())
+		return
+	}
 }
 
 func (s *Gateway) maybeStartIdentd() {

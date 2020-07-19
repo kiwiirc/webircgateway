@@ -67,6 +67,8 @@ type Config struct {
 	RemoteOrigins         []glob.Glob
 	ReverseProxies        []net.IPNet
 	Webroot               string
+	LuaScript             string
+	LuaWorkers            int
 	ClientRealname        string
 	ClientUsername        string
 	ClientHostname        string
@@ -88,6 +90,10 @@ func NewConfig(gateway *Gateway) *Config {
 
 // ConfigResolvePath - If relative, resolve a path to it's full absolute path relative to the config file
 func (c *Config) ResolvePath(path string) string {
+	if strings.Trim(path, " ") == "" {
+		return ""
+	}
+
 	// Absolute paths should stay as they are
 	if path[0:1] == "/" {
 		return path
@@ -142,6 +148,8 @@ func (c *Config) Load() error {
 	c.GatewayWhitelist = []glob.Glob{}
 	c.ReverseProxies = []net.IPNet{}
 	c.Webroot = ""
+	c.LuaScript = ""
+	c.LuaWorkers = 3
 	c.ReCaptchaSecret = ""
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
@@ -184,6 +192,11 @@ func (c *Config) Load() error {
 
 		if section.Name() == "dnsbl" {
 			c.DnsblAction = section.Key("action").MustString("")
+		}
+
+		if section.Name() == "scripts" {
+			c.LuaScript = section.Key("file").MustString("")
+			c.LuaWorkers = section.Key("workers").MustInt(4)
 		}
 
 		if section.Name() == "dnsbl.servers" {
