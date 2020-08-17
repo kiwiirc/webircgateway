@@ -1,6 +1,7 @@
 package webircgateway
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"os"
@@ -27,6 +28,7 @@ type ConfigUpstream struct {
 	ServerPassword       string
 	GatewayName          string
 	Proxy                *ConfigProxy
+	WebircCertificate    []tls.Certificate
 }
 
 // ConfigServer - A web server config
@@ -77,6 +79,7 @@ type Config struct {
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
+	WebircCert            *tls.Certificate
 	Plugins               []string
 	DnsblServers          []string
 	// DnsblAction - "deny" = deny the connection. "verify" = require verification
@@ -148,6 +151,7 @@ func (c *Config) Load() error {
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
 	c.Secret = ""
+	c.WebircCert = nil
 	c.SendQuitOnClientClose = ""
 	c.ClientRealname = ""
 	c.ClientUsername = ""
@@ -172,6 +176,20 @@ func (c *Config) Load() error {
 			}
 
 			c.Secret = section.Key("secret").MustString("")
+
+			// Load webirc client certificate
+			webircCert := section.Key("webirc_cert").MustString("")
+			webircKey := section.Key("webirc_key").MustString("")
+			if webircCert != "" && webircKey != "" {
+				certPath := c.ResolvePath(webircCert)
+				keyPath := c.ResolvePath(webircKey)
+				webircCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+				if err == nil {
+					c.WebircCert = &webircCert
+				} else {
+					c.gateway.Log(3, "Failed to load webirc certificate, "+err.Error())
+				}
+			}
 			c.SendQuitOnClientClose = section.Key("send_quit_on_client_close").MustString("Connection closed")
 		}
 

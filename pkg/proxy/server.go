@@ -36,19 +36,24 @@ type HandshakeMeta struct {
 	Interface string `json:"interface"`
 }
 
-func MakeClient(conn net.Conn) *Client {
-	return &Client{
+func MakeClient(conn net.Conn, webircCert *tls.Certificate) *Client {
+	client := &Client{
 		Client: conn,
 	}
+	if webircCert != nil {
+		client.WebircCertificate = []tls.Certificate{*webircCert}
+	}
+	return client
 }
 
 type Client struct {
-	Client       net.Conn
-	Upstream     net.Conn
-	UpstreamAddr *net.TCPAddr
-	Username     string
-	BindAddr     *net.TCPAddr
-	TLS          bool
+	Client            net.Conn
+	Upstream          net.Conn
+	UpstreamAddr      *net.TCPAddr
+	Username          string
+	BindAddr          *net.TCPAddr
+	TLS               bool
+	WebircCertificate []tls.Certificate
 }
 
 func (c *Client) Run() {
@@ -185,7 +190,7 @@ func (c *Client) Pipe() {
 	}
 }
 
-func Start(laddr string) {
+func Start(laddr string, webircCert *tls.Certificate) {
 	srv, err := net.Listen("tcp", laddr)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -205,7 +210,7 @@ func Start(laddr string) {
 			break
 		}
 
-		c := MakeClient(conn)
+		c := MakeClient(conn, webircCert)
 		go c.Run()
 	}
 }

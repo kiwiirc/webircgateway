@@ -343,7 +343,10 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 		}
 
 		if upstreamConfig.TLS {
-			tlsConfig := &tls.Config{InsecureSkipVerify: true}
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       upstreamConfig.WebircCertificate,
+			}
 			tlsConn := tls.Client(conn, tlsConfig)
 			err := tlsConn.Handshake()
 			if err != nil {
@@ -401,6 +404,10 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 
 func (c *Client) writeWebircLines(upstream io.ReadWriteCloser) {
 	// Send any WEBIRC lines
+	if len(c.UpstreamConfig.WebircCertificate) > 0 && c.UpstreamConfig.WebircPassword == "" {
+		c.UpstreamConfig.WebircPassword = "*"
+	}
+
 	if c.UpstreamConfig.WebircPassword == "" {
 		c.Log(1, "No webirc to send")
 		return
@@ -697,6 +704,11 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
 	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
 
+	if c.Gateway.Config.WebircCert != nil {
+		upstreamConfig.WebircCertificate = []tls.Certificate{
+			*c.Gateway.Config.WebircCert,
+		}
+	}
 	return upstreamConfig
 }
 
