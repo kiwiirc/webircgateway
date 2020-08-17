@@ -78,10 +78,7 @@ func (s *Gateway) Start() {
 	}
 
 	if s.Function == "proxy" {
-		proxy.Start(
-			fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port),
-			s.Config.WebircCert,
-		)
+		proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
 	}
 }
 

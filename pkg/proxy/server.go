@@ -29,21 +29,19 @@ var identdRpc *identd.RpcClient
 var Server net.Listener
 
 type HandshakeMeta struct {
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	TLS       bool   `json:"ssl"`
-	Username  string `json:"username"`
-	Interface string `json:"interface"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	TLS           bool   `json:"ssl"`
+	Username      string `json:"username"`
+	Interface     string `json:"interface"`
+	WebircPemCert []byte `json:"webirc_cert"`
+	WebircPemKey  []byte `json:"webirc_key"`
 }
 
-func MakeClient(conn net.Conn, webircCert *tls.Certificate) *Client {
-	client := &Client{
+func MakeClient(conn net.Conn) *Client {
+	return &Client{
 		Client: conn,
 	}
-	if webircCert != nil {
-		client.WebircCertificate = []tls.Certificate{*webircCert}
-	}
-	return client
 }
 
 type Client struct {
@@ -91,6 +89,13 @@ func (c *Client) Handshake() error {
 	if unmarshalErr != nil {
 		c.Client.Write([]byte(ResponseError))
 		return unmarshalErr
+	}
+
+	if len(meta.WebircPemCert) > 0 && len(meta.WebircPemKey) > 0 {
+		webircCert, err := tls.X509KeyPair(meta.WebircPemCert, meta.WebircPemKey)
+		if err == nil {
+			c.WebircCertificate = []tls.Certificate{webircCert}
+		}
 	}
 
 	if meta.Host == "" || meta.Port == 0 || meta.Username == "" || meta.Interface == "" {
@@ -148,7 +153,10 @@ func (c *Client) ConnectUpstream() error {
 	}
 
 	if c.TLS {
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+			Certificates:       c.WebircCertificate,
+		}
 		tlsConn := tls.Client(conn, tlsConfig)
 		err := tlsConn.Handshake()
 		if err != nil {
@@ -190,7 +198,7 @@ func (c *Client) Pipe() {
 	}
 }
 
-func Start(laddr string, webircCert *tls.Certificate) {
+func Start(laddr string) {
 	srv, err := net.Listen("tcp", laddr)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -210,7 +218,7 @@ func Start(laddr string, webircCert *tls.Certificate) {
 			break
 		}
 
-		c := MakeClient(conn, webircCert)
+		c := MakeClient(conn)
 		go c.Run()
 	}
 }
