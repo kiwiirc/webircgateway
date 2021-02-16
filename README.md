@@ -17,7 +17,7 @@
 * Multiple websocket / transport engine support
     * Websockets (/webirc/websocket/)
     * SockJS (/webirc/sockjs/)
-    * Kiwi IRC multi-servers (/webirc/kiwi/)
+    * Kiwi IRC multi-servers (/webirc/kiwiirc/)
 * Designed for wide web browser support
 * HTTP Origin header whitelisting
 * reCaptcha support
