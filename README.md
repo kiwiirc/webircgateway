@@ -1,6 +1,10 @@
 # webircgateway
 **A simple http/websocket gateway to IRC networks for any web client**
 
+<p align="center">
+  <img src="/webircgateway.svg">
+</p>
+
 *Pre-built binaries can be downloaded from https://kiwiirc.com/downloads/index.html*
 
 ### Features
