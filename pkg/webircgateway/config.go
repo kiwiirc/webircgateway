@@ -1,7 +1,9 @@
 package webircgateway
 
 import (
+	"crypto/tls"
 	"errors"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -27,6 +29,9 @@ type ConfigUpstream struct {
 	ServerPassword       string
 	GatewayName          string
 	Proxy                *ConfigProxy
+	WebircCertificate    []tls.Certificate
+	WebircPemCert        []byte
+	WebircPemKey         []byte
 }
 
 // ConfigServer - A web server config
@@ -77,6 +82,9 @@ type Config struct {
 	ReCaptchaSecret       string
 	ReCaptchaKey          string
 	Secret                string
+	WebircCertificate     *tls.Certificate
+	WebircPemCert         []byte
+	WebircPemKey          []byte
 	Plugins               []string
 	DnsblServers          []string
 	// DnsblAction - "deny" = deny the connection. "verify" = require verification
@@ -148,6 +156,9 @@ func (c *Config) Load() error {
 	c.ReCaptchaKey = ""
 	c.RequiresVerification = false
 	c.Secret = ""
+	c.WebircCertificate = nil
+	c.WebircPemCert = make([]byte, 0)
+	c.WebircPemKey = make([]byte, 0)
 	c.SendQuitOnClientClose = ""
 	c.ClientRealname = ""
 	c.ClientUsername = ""
@@ -172,6 +183,33 @@ func (c *Config) Load() error {
 			}
 
 			c.Secret = section.Key("secret").MustString("")
+
+			// Load webirc client certificate
+			webircCert := section.Key("webirc_cert").MustString("")
+			webircKey := section.Key("webirc_key").MustString("")
+			if webircCert != "" && webircKey != "" {
+				certPath := c.ResolvePath(webircCert)
+				keyPath := c.ResolvePath(webircKey)
+
+				c.WebircPemCert, err = ioutil.ReadFile(certPath)
+				if err != nil {
+					c.gateway.Log(3, "Failed to load webirc certificate, "+err.Error())
+					continue
+				}
+
+				c.WebircPemKey, err = ioutil.ReadFile(keyPath)
+				if err != nil {
+					c.gateway.Log(3, "Failed to load webirc certificate, "+err.Error())
+					continue
+				}
+
+				webircCert, err := tls.X509KeyPair(c.WebircPemCert, c.WebircPemKey)
+				if err == nil {
+					c.WebircCertificate = &webircCert
+				} else {
+					c.gateway.Log(3, "Failed to load webirc certificate, "+err.Error())
+				}
+			}
 			c.SendQuitOnClientClose = section.Key("send_quit_on_client_close").MustString("Connection closed")
 		}
 

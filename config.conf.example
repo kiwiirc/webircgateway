@@ -10,6 +10,10 @@ gateway_name = "webircgateway"
 # A secret string used for generating client JWT tokens. Do not share this!
 secret = ""
 
+# Webirc client certificate sent to servers when connecting with TLS
+webirc_cert = ""
+webirc_key = ""
+
 # Send the server a quit message when the client is closed
 # Comment out to disable
 send_quit_on_client_close = "Client closed"

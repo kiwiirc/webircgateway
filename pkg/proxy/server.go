@@ -29,11 +29,13 @@ var identdRpc *identd.RpcClient
 var Server net.Listener
 
 type HandshakeMeta struct {
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	TLS       bool   `json:"ssl"`
-	Username  string `json:"username"`
-	Interface string `json:"interface"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	TLS           bool   `json:"ssl"`
+	Username      string `json:"username"`
+	Interface     string `json:"interface"`
+	WebircPemCert []byte `json:"webirc_cert"`
+	WebircPemKey  []byte `json:"webirc_key"`
 }
 
 func MakeClient(conn net.Conn) *Client {
@@ -43,12 +45,13 @@ func MakeClient(conn net.Conn) *Client {
 }
 
 type Client struct {
-	Client       net.Conn
-	Upstream     net.Conn
-	UpstreamAddr *net.TCPAddr
-	Username     string
-	BindAddr     *net.TCPAddr
-	TLS          bool
+	Client            net.Conn
+	Upstream          net.Conn
+	UpstreamAddr      *net.TCPAddr
+	Username          string
+	BindAddr          *net.TCPAddr
+	TLS               bool
+	WebircCertificate []tls.Certificate
 }
 
 func (c *Client) Run() {
@@ -86,6 +89,13 @@ func (c *Client) Handshake() error {
 	if unmarshalErr != nil {
 		c.Client.Write([]byte(ResponseError))
 		return unmarshalErr
+	}
+
+	if len(meta.WebircPemCert) > 0 && len(meta.WebircPemKey) > 0 {
+		webircCert, err := tls.X509KeyPair(meta.WebircPemCert, meta.WebircPemKey)
+		if err == nil {
+			c.WebircCertificate = []tls.Certificate{webircCert}
+		}
 	}
 
 	if meta.Host == "" || meta.Port == 0 || meta.Username == "" || meta.Interface == "" {
@@ -143,7 +153,10 @@ func (c *Client) ConnectUpstream() error {
 	}
 
 	if c.TLS {
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+			Certificates:       c.WebircCertificate,
+		}
 		tlsConn := tls.Client(conn, tlsConfig)
 		err := tlsConn.Handshake()
 		if err != nil {
