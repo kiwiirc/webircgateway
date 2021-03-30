@@ -193,7 +193,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 				Secret: c.Gateway.Config.ReCaptchaSecret,
 			}
 
-			verified = captcha.VerifyResponse(message.Params[0])
+			verified = captcha.VerifyResponse(message.Params[0], c.RemoteAddr)
 		}
 
 		if !verified {
