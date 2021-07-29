@@ -402,7 +402,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			tokenData["iss"] = c.UpstreamConfig.NetworkCommonAddress
 		}
 
-		if tokenFor == "" {
+		if tokenFor == "" || tokenFor == "*" {
 			tokenM.Params = append(tokenM.Params, "*")
 		} else {
 			tokenM.Params = append(tokenM.Params, tokenFor)
