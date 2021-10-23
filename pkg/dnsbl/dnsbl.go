@@ -52,7 +52,7 @@ func toDnsBlHostname(ip net.IP) string {
 	// IPv6
 	// Remove all : from a full expanded address, then reverse all the hex characters
 	ipv6Str := expandIPv6(ip)
-	addrHexStr := strings.ReplaceAll(ipv6Str, ":", "")
+	addrHexStr := strings.Replace(ipv6Str, ":", "", -1)
 	chars := []rune(addrHexStr)
 	for i, j := 0, len(chars)-1; i < j; i, j = i+1, j-1 {
 		chars[i], chars[j] = chars[j], chars[i]
