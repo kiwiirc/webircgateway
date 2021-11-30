@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/igm/sockjs-go/sockjs"
+	"github.com/igm/sockjs-go/v3/sockjs"
 	cmap "github.com/orcaman/concurrent-map"
 )
 
