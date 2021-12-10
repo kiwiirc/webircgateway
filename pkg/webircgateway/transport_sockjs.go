@@ -2,8 +2,10 @@ package webircgateway
 
 import (
 	"net"
+	"net/http"
 	"strings"
 
+	"github.com/gorilla/websocket"
 	"github.com/igm/sockjs-go/v3/sockjs"
 )
 
@@ -13,7 +15,12 @@ type TransportSockjs struct {
 
 func (t *TransportSockjs) Init(g *Gateway) {
 	t.gateway = g
-	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjs.DefaultOptions, t.sessionHandler)
+	sockjsOptions := sockjs.DefaultOptions
+	sockjsOptions.WebsocketUpgrader = &websocket.Upgrader{
+		// Origin is checked within the session handler
+		CheckOrigin: func(_ *http.Request) bool { return true },
+	}
+	sockjsHandler := sockjs.NewHandler("/webirc/sockjs", sockjsOptions, t.sessionHandler)
 	t.gateway.HttpRouter.Handle("/webirc/sockjs/", sockjsHandler)
 }
 

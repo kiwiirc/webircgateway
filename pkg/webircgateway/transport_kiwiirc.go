@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"runtime/debug"
 	"strings"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/igm/sockjs-go/v3/sockjs"
 	cmap "github.com/orcaman/concurrent-map"
 )
@@ -18,7 +20,12 @@ type TransportKiwiirc struct {
 
 func (t *TransportKiwiirc) Init(g *Gateway) {
 	t.gateway = g
-	handler := sockjs.NewHandler("/webirc/kiwiirc", sockjs.DefaultOptions, t.sessionHandler)
+	sockjsOptions := sockjs.DefaultOptions
+	sockjsOptions.WebsocketUpgrader = &websocket.Upgrader{
+		// Origin is checked within the session handler
+		CheckOrigin: func(_ *http.Request) bool { return true },
+	}
+	handler := sockjs.NewHandler("/webirc/kiwiirc", sockjsOptions, t.sessionHandler)
 	t.gateway.HttpRouter.Handle("/webirc/kiwiirc/", handler)
 }
 

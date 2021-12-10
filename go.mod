@@ -4,6 +4,7 @@ require (
 	github.com/OneOfOne/xxhash v1.2.8
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gobwas/glob v0.2.3
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/igm/sockjs-go/v3 v3.0.2
 	github.com/orcaman/concurrent-map v0.0.0-20210501183033-44dafcb38ecc
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
