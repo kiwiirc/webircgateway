@@ -303,6 +303,15 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 	client := c
 	upstreamConfig := c.UpstreamConfig
 
+	// TODO remove me
+	upstreamConfig.Proxy = &ConfigProxy{
+		Type:      "kiwi",
+		Hostname:  "127.0.0.1",
+		Port:      7999,
+		TLS:       false,
+		Username:  client.IrcState.Username,
+		Interface: "0.0.0.0",
+	}
 	var connection io.ReadWriteCloser
 
 	if upstreamConfig.Proxy == nil {
@@ -343,7 +352,10 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 		}
 
 		if upstreamConfig.TLS {
-			tlsConfig := &tls.Config{InsecureSkipVerify: true}
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       upstreamConfig.WebircCertificate,
+			}
 			tlsConn := tls.Client(conn, tlsConfig)
 			err := tlsConn.Handshake()
 			if err != nil {
@@ -367,6 +379,8 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 		conn.DestTLS = upstreamConfig.TLS
 		conn.Username = upstreamConfig.Proxy.Username
 		conn.ProxyInterface = upstreamConfig.Proxy.Interface
+		conn.WebircPemCert = upstreamConfig.WebircPemCert
+		conn.WebircPemKey = upstreamConfig.WebircPemKey
 
 		dialErr := conn.Dial(fmt.Sprintf(
 			"%s:%d",
@@ -401,6 +415,10 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 
 func (c *Client) writeWebircLines(upstream io.ReadWriteCloser) {
 	// Send any WEBIRC lines
+	if len(c.UpstreamConfig.WebircCertificate) > 0 && c.UpstreamConfig.WebircPassword == "" {
+		c.UpstreamConfig.WebircPassword = "*"
+	}
+
 	if c.UpstreamConfig.WebircPassword == "" {
 		c.Log(1, "No webirc to send")
 		return
@@ -696,7 +714,14 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.Timeout = c.Gateway.Config.GatewayTimeout
 	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
 	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
+	upstreamConfig.WebircPemCert = c.Gateway.Config.WebircPemCert
+	upstreamConfig.WebircPemKey = c.Gateway.Config.WebircPemKey
 
+	if c.Gateway.Config.WebircCertificate.Certificate != nil {
+		upstreamConfig.WebircCertificate = []tls.Certificate{
+			*c.Gateway.Config.WebircCertificate,
+		}
+	}
 	return upstreamConfig
 }
 

@@ -31,6 +31,8 @@ type KiwiProxyConnection struct {
 	DestTLS        bool
 	State          KiwiProxyState
 	Conn           *net.Conn
+	WebircPemCert  []byte
+	WebircPemKey   []byte
 }
 
 func MakeKiwiProxyConnection() *KiwiProxyConnection {
@@ -63,11 +65,13 @@ func (c *KiwiProxyConnection) Dial(proxyServerAddr string) error {
 	c.State = KiwiProxyStateHandshaking
 
 	meta, _ := json.Marshal(map[string]interface{}{
-		"username":  c.Username,
-		"interface": c.ProxyInterface,
-		"host":      c.DestHost,
-		"port":      c.DestPort,
-		"ssl":       c.DestTLS,
+		"username":    c.Username,
+		"interface":   c.ProxyInterface,
+		"host":        c.DestHost,
+		"port":        c.DestPort,
+		"ssl":         c.DestTLS,
+		"webirc_cert": c.WebircPemCert,
+		"webirc_key":  c.WebircPemKey,
 	})
 
 	(*c.Conn).Write(append(meta, byte('\n')))
