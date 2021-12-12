@@ -380,7 +380,8 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	}
 
 	if c.Features.ExtJwt && strings.ToUpper(message.Command) == "EXTJWT" {
-		tokenFor := message.GetParam(0, "")
+		tokenTarget := message.GetParam(0, "")
+		tokenService := message.GetParam(1, "")
 
 		tokenM := irc.Message{}
 		tokenM.Command = "EXTJWT"
@@ -395,13 +396,6 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			"channel": "",
 			"joined":  0,
 			"cmodes":  []string{},
-
-			// TODO remove below claims
-			// here for backwards compatability with older draft of spec
-			"nick":        c.IrcState.Nick,
-			"time_joined": 0,
-			"net_modes":   []string{},
-			"modes":       []string{},
 		}
 
 		// Use the NetworkCommonAddress if a plugin as assigned one.
@@ -410,30 +404,30 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			tokenData["iss"] = c.UpstreamConfig.NetworkCommonAddress
 		}
 
-		if tokenFor == "" || tokenFor == "*" {
+		if tokenTarget == "" || tokenTarget == "*" {
 			tokenM.Params = append(tokenM.Params, "*")
 		} else {
-			tokenM.Params = append(tokenM.Params, tokenFor)
+			tokenM.Params = append(tokenM.Params, tokenTarget)
 
-			tokenForChan := c.IrcState.GetChannel(tokenFor)
+			tokenForChan := c.IrcState.GetChannel(tokenTarget)
 			if tokenForChan != nil {
 				tokenData["channel"] = tokenForChan.Name
 				tokenData["joined"] = tokenForChan.Joined.Unix()
-				// TODO remove time_joined
-				// here for backwards compatability with older draft of spec
-				tokenData["time_joined"] = tokenForChan.Joined.Unix()
 
 				modes := []string{}
 				for mode := range tokenForChan.Modes {
 					modes = append(modes, mode)
 				}
 				tokenData["cmodes"] = modes
-				// TODO remove modes
-				// here for backwards compatability with older draft of spec
-				tokenData["modes"] = modes
 			} else {
-				tokenData["channel"] = tokenFor
+				tokenData["channel"] = tokenTarget
 			}
+		}
+
+		if tokenService == "" || tokenService == "*" {
+			tokenM.Params = append(tokenM.Params, "*")
+		} else {
+			tokenM.Params = append(tokenM.Params, tokenService)
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
