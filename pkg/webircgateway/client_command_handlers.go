@@ -385,14 +385,22 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		tokenM := irc.Message{}
 		tokenM.Command = "EXTJWT"
 		tokenData := jwt.MapClaims{
-			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
-			"iss":         c.UpstreamConfig.Hostname,
+			"exp":     time.Now().UTC().Add(1 * time.Minute).Unix(),
+			"iss":     c.UpstreamConfig.Hostname,
+			"sub":     c.IrcState.Nick,
+			"account": c.IrcState.Account,
+			"umodes":  []string{},
+
+			// Channel specific claims
+			"channel": "",
+			"joined":  0,
+			"cmodes":  []string{},
+
+			// TODO remove below claims
+			// here for backwards compatability with older draft of spec
 			"nick":        c.IrcState.Nick,
-			"account":     c.IrcState.Account,
-			"net_modes":   []string{},
-			"channel":     "",
-			"joined":      false,
 			"time_joined": 0,
+			"net_modes":   []string{},
 			"modes":       []string{},
 		}
 
@@ -409,14 +417,19 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 
 			tokenForChan := c.IrcState.GetChannel(tokenFor)
 			if tokenForChan != nil {
-				tokenData["time_joined"] = tokenForChan.Joined.Unix()
 				tokenData["channel"] = tokenForChan.Name
-				tokenData["joined"] = true
+				tokenData["joined"] = tokenForChan.Joined.Unix()
+				// TODO remove time_joined
+				// here for backwards compatability with older draft of spec
+				tokenData["time_joined"] = tokenForChan.Joined.Unix()
 
 				modes := []string{}
 				for mode := range tokenForChan.Modes {
 					modes = append(modes, mode)
 				}
+				tokenData["cmodes"] = modes
+				// TODO remove modes
+				// here for backwards compatability with older draft of spec
 				tokenData["modes"] = modes
 			} else {
 				tokenData["channel"] = tokenFor
