@@ -427,14 +427,16 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		if tokenService == "" || tokenService == "*" {
 			tokenM.Params = append(tokenM.Params, "*")
 		} else {
-			tokenM.Params = append(tokenM.Params, tokenService)
+			c.SendIrcFail("EXTJWT", "NO_SUCH_SERVICE", "No such service")
+			return "", nil
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
 		tokenSigned, tokenSignedErr := token.SignedString([]byte(c.Gateway.Config.Secret))
 		if tokenSignedErr != nil {
 			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
-			println(tokenSignedErr.Error())
+			c.SendIrcFail("EXTJWT", "UNKNOWN_ERROR", "Failed to generate token")
+			return "", nil
 		}
 
 		tokenM.Params = append(tokenM.Params, tokenSigned)

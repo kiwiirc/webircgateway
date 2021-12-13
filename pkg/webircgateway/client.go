@@ -239,6 +239,14 @@ func (c *Client) SendIrcError(message string) {
 	c.SendClientSignal("data", "ERROR :"+message)
 }
 
+func (c *Client) SendIrcFail(params ...string) {
+	failMessage := irc.Message{
+		Command: "FAIL",
+		Params:  params,
+	}
+	c.SendClientSignal("data", failMessage.ToLine())
+}
+
 func (c *Client) connectUpstream() {
 	client := c
 
