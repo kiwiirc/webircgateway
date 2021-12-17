@@ -15,7 +15,7 @@ import (
 
 // ConfigUpstream - An upstream config
 type ConfigUpstream struct {
-	// Plugins may assign an arbitary address to an upstream network
+	// Plugins may assign an arbitrary address to an upstream network
 	NetworkCommonAddress string
 	Network              string
 	Hostname             string
@@ -59,6 +59,7 @@ type Config struct {
 	GatewayWhitelist      []glob.Glob
 	GatewayThrottle       int
 	GatewayTimeout        int
+	GatewayIPv4           bool
 	GatewayWebircPassword map[string]string
 	Proxy                 ConfigServer
 	Upstreams             []ConfigUpstream
@@ -197,6 +198,7 @@ func (c *Config) Load() error {
 
 		if section.Name() == "gateway" {
 			c.Gateway = section.Key("enabled").MustBool(false)
+			c.GatewayIPv4 = section.Key("force_ipv4").MustBool(false)
 			c.GatewayTimeout = section.Key("timeout").MustInt(10)
 			c.GatewayThrottle = section.Key("throttle").MustInt(2)
 		}
@@ -256,7 +258,13 @@ func (c *Config) Load() error {
 				upstream.Network = "unix"
 				upstream.Hostname = hostname[5:]
 			} else {
-				upstream.Network = "tcp"
+				ipv4 := section.Key("force_ipv4").MustBool(false)
+				if ipv4 {
+					upstream.Network = "tcp4"
+				} else {
+					upstream.Network = "tcp"
+				}
+
 				upstream.Hostname = hostname
 				upstream.Port = section.Key("port").MustInt(6667)
 				upstream.TLS = section.Key("tls").MustBool(false)

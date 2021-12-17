@@ -91,6 +91,8 @@ kiwiirc
 hostname = "irc.example.net"
 port = 6667
 tls = false
+# force outgoing connections to IPv4
+force_ipv4 = false
 # Connection timeout in seconds
 timeout = 5
 # Throttle the lines being written by X per second
@@ -104,6 +106,7 @@ serverpassword = ""
 # network below) through the kiwiirc engine
 [gateway]
 enabled = false
+force_ipv4 = false
 timeout = 5
 throttle = 2
 

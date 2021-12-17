@@ -316,7 +316,7 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 			conn, connErr = dialer.Dial("unix", upstreamConfig.Hostname)
 		} else {
 			upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
-			conn, connErr = dialer.Dial("tcp", upstreamStr)
+			conn, connErr = dialer.Dial(upstreamConfig.Network, upstreamStr)
 		}
 
 		if connErr != nil {
@@ -696,6 +696,12 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.Timeout = c.Gateway.Config.GatewayTimeout
 	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
 	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
+
+	if c.Gateway.Config.GatewayIPv4 {
+		upstreamConfig.Network = "tcp4"
+	} else {
+		upstreamConfig.Network = "tcp"
+	}
 
 	return upstreamConfig
 }
