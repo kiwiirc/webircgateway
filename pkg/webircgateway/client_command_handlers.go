@@ -314,14 +314,14 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 				}
 			}
 
-			message.Params[1] = strings.Join(newCaps, " ")
-			if strings.Trim(message.Params[1], " ") == "" {
-				// We fake this because otherwise some servers never respond.
-				c.SendClientSignal("data", "CAP * ACK :message-tags")
+			if len(newCaps) == 0 {
+				// The only requested CAP was our emulated message-tags
+				// the server will not be sending an ACK so we need to send our own
+				c.SendClientSignal("data", "CAP * ACK :"+c.RequestedMessageTagsCap)
 				return "", nil
-			} else {
-				line = message.ToLine()
 			}
+			message.Params[1] = strings.Join(newCaps, " ")
+			line = message.ToLine()
 		} else if !containsOneOf(reqCaps, capsThatEnableMessageTags) {
 			// Didn't request anything that needs message-tags cap so disable it
 			c.Features.Messagetags = false
