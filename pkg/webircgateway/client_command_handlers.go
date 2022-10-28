@@ -327,6 +327,12 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 				}
 			}
 
+			if len(newCaps) == 0 {
+				// The only requested CAP was our emulated message-tags
+				// the server will not be sending an ACK so we need to send our own
+				c.SendClientSignal("data", "CAP * ACK :"+c.RequestedMessageTagsCap)
+				return "", nil
+			}
 			message.Params[1] = strings.Join(newCaps, " ")
 			line = message.ToLine()
 		} else if !containsOneOf(reqCaps, capsThatEnableMessageTags) {
