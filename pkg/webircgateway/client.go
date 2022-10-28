@@ -153,7 +153,7 @@ func (c *Client) TrafficLog(isUpstream bool, toGateway bool, traffic string) {
 	} else if !isUpstream && !toGateway {
 		label = "->Client"
 	}
-	c.Log(1, fmt.Sprintf("Traffic (%s) %s", label, traffic))
+	c.Log(1, "Traffic (%s) %s", label, traffic)
 }
 
 func (c *Client) Ready() {

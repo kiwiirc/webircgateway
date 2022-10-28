@@ -193,9 +193,7 @@ func (c *Config) Load() error {
 		}
 
 		if section.Name() == "dnsbl.servers" {
-			for _, addr := range section.KeyStrings() {
-				c.DnsblServers = append(c.DnsblServers, addr)
-			}
+			c.DnsblServers = append(c.DnsblServers, section.KeyStrings()...)
 		}
 
 		if section.Name() == "gateway" {

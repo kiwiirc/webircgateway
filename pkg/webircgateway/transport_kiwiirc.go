@@ -142,7 +142,7 @@ func (t *TransportKiwiirc) sessionHandler(session sockjs.Session) {
 			}
 		}
 
-		for channel := range channels.Iter() {
+		for channel := range channels.IterBuffered() {
 			c := channel.Val.(*TransportKiwiircChannel)
 			c.Closed = true
 			c.Client.StartShutdown("client_closed")

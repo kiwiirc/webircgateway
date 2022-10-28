@@ -58,10 +58,7 @@ func (s *Gateway) Log(level int, format string, args ...interface{}) {
 
 	levels := [...]string{"L_DEBUG", "L_INFO", "L_WARN"}
 	line := fmt.Sprintf(levels[level-1]+" "+format, args...)
-
-	select {
-	case s.LogOutput <- line:
-	}
+	s.LogOutput <- line
 }
 
 func (s *Gateway) Start() {
@@ -152,7 +149,7 @@ func (s *Gateway) initHttpRoutes() error {
 		}
 
 		out := ""
-		for item := range s.Clients.Iter() {
+		for item := range s.Clients.IterBuffered() {
 			c := item.Val.(*Client)
 			line := fmt.Sprintf(
 				"%s:%d %s %s!%s %s %s",
