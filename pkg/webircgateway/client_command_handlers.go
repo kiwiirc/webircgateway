@@ -275,7 +275,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 		}
 
 		// Parse host:+port into the c.dest* vars
-		portSep := strings.Index(addr, ":")
+		portSep := strings.LastIndex(addr, ":")
 		if portSep == -1 {
 			c.DestHost = addr
 			c.DestPort = 6667

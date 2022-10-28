@@ -94,6 +94,22 @@ func containsOneOf(s string, substrs []string) bool {
 	return false
 }
 
+func stringInSlice(s string, slice []string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func stringInSliceOrDefault(s, def string, validStrings []string) string {
+	if stringInSlice(s, validStrings) {
+		return s
+	}
+	return def
+}
+
 type ThrottledStringChannel struct {
 	in     chan string
 	Input  chan<- string
