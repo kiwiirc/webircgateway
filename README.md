@@ -100,7 +100,7 @@ Once compiled and you have a config file set, run `./webircgateway --config=conf
 ### Configuration location
 By default the configuration file is looked for in the current directly, ./config.conf. Use the --config parameter to specify a different location.
 
-You may also use a shell command to load your config by prefixing the config option with "$ " like so: --config="$ curl http://example.com/config.conf". Great if you want to remotely include a config file or load it from a service like etcd.
+You may also use a shell command to load your config by prefixing the config option with `$` like so: `--config="$ curl http://example.com/config.conf"`. Great if you want to remotely include a config file or load it from a service like etcd.
 
 Note: All filenames within the configuration file are relative to the configuration file itself unless the filename starts with "/" which makes it an absolute path.
 
