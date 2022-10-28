@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var v4LoopbackAddr = net.ParseIP("127.0.0.1")
+
 func (s *Gateway) NewClient() *Client {
 	return NewClient(s)
 }
@@ -76,26 +78,11 @@ func (s *Gateway) findWebircPassword(ircHost string) string {
 }
 
 func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-
-	// Some web listeners such as unix sockets don't get a RemoteAddr, so default to localhost
-	if remoteAddr == "" {
-		remoteAddr = "127.0.0.1"
-	}
-
-	remoteIP := net.ParseIP(remoteAddr)
-
-	isInRange := false
-	for _, cidrRange := range s.Config.ReverseProxies {
-		if cidrRange.Contains(remoteIP) {
-			isInRange = true
-			break
-		}
-	}
+	remoteIP := remoteIPFromRequest(req)
 
 	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
 	// the headers and use the remoteIP as the users IP
-	if !isInRange {
+	if !s.isTrustedProxy(remoteIP) {
 		return remoteIP
 	}
 
@@ -114,29 +101,33 @@ func (s *Gateway) GetRemoteAddressFromRequest(req *http.Request) net.IP {
 }
 
 func (s *Gateway) isRequestSecure(req *http.Request) bool {
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-	remoteIP := net.ParseIP(remoteAddr)
-
-	isInRange := false
-	for _, cidrRange := range s.Config.ReverseProxies {
-		if cidrRange.Contains(remoteIP) {
-			isInRange = true
-			break
-		}
-	}
+	remoteIP := remoteIPFromRequest(req)
 
 	// If the remoteIP is not in a whitelisted reverse proxy range, don't trust
 	// the headers and check the request directly
-	if !isInRange && req.TLS == nil {
-		return false
-	} else if !isInRange {
-		return true
+	if !s.isTrustedProxy(remoteIP) {
+		return req.TLS != nil
 	}
 
-	headerVal := strings.ToLower(req.Header.Get("x-forwarded-proto"))
-	if headerVal == "https" {
-		return true
-	}
+	fwdProto := req.Header.Get("x-forwarded-proto")
+	return strings.EqualFold(fwdProto, "https")
+}
 
+func (s *Gateway) isTrustedProxy(remoteIP net.IP) bool {
+	for _, cidrRange := range s.Config.ReverseProxies {
+		if cidrRange.Contains(remoteIP) {
+			return true
+		}
+	}
 	return false
+}
+
+func remoteIPFromRequest(req *http.Request) net.IP {
+	if req.RemoteAddr == "@" {
+		// remote address is unix socket, treat it as loopback interface
+		return v4LoopbackAddr
+	}
+
+	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+	return net.ParseIP(remoteAddr)
 }
