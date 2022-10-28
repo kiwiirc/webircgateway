@@ -13,6 +13,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+var MAX_EXTJWT_SIZE = 200
+
 /*
  * ProcessLineFromUpstream
  * Processes and makes any changes to a line of data sent from an upstream
@@ -33,6 +35,7 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 	if pLen > 0 && m.Command == "001" {
 		client.IrcState.Nick = m.Params[0]
 		client.State = ClientStateConnected
+		client.ServerMessagePrefix = *m.Prefix
 
 		// Throttle writes if configured, but only after registration is complete. Typical IRCd
 		// behavior is to not throttle registration commands.
@@ -385,20 +388,22 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 	}
 
 	if c.Features.ExtJwt && strings.ToUpper(message.Command) == "EXTJWT" {
-		tokenFor := message.GetParam(0, "")
+		tokenTarget := message.GetParam(0, "")
+		tokenService := message.GetParam(1, "")
 
 		tokenM := irc.Message{}
 		tokenM.Command = "EXTJWT"
 		tokenData := jwt.MapClaims{
-			"exp":         time.Now().UTC().Add(1 * time.Minute).Unix(),
-			"iss":         c.UpstreamConfig.Hostname,
-			"nick":        c.IrcState.Nick,
-			"account":     c.IrcState.Account,
-			"net_modes":   []string{},
-			"channel":     "",
-			"joined":      false,
-			"time_joined": 0,
-			"modes":       []string{},
+			"exp":     time.Now().UTC().Add(1 * time.Minute).Unix(),
+			"iss":     c.UpstreamConfig.Hostname,
+			"sub":     c.IrcState.Nick,
+			"account": c.IrcState.Account,
+			"umodes":  []string{},
+
+			// Channel specific claims
+			"channel": "",
+			"joined":  0,
+			"cmodes":  []string{},
 		}
 
 		// Use the NetworkCommonAddress if a plugin as assigned one.
@@ -407,36 +412,59 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			tokenData["iss"] = c.UpstreamConfig.NetworkCommonAddress
 		}
 
-		if tokenFor == "" || tokenFor == "*" {
+		if tokenTarget == "" || tokenTarget == "*" {
 			tokenM.Params = append(tokenM.Params, "*")
 		} else {
-			tokenM.Params = append(tokenM.Params, tokenFor)
-
-			tokenForChan := c.IrcState.GetChannel(tokenFor)
-			if tokenForChan != nil {
-				tokenData["time_joined"] = tokenForChan.Joined.Unix()
-				tokenData["channel"] = tokenForChan.Name
-				tokenData["joined"] = true
-
-				modes := []string{}
-				for mode := range tokenForChan.Modes {
-					modes = append(modes, mode)
+			targetChan := c.IrcState.GetChannel(tokenTarget)
+			if targetChan == nil {
+				// Channel does not exist in IRC State, send so such channel message
+				failMessage := irc.Message{
+					Command: "403", // ERR_NOSUCHCHANNEL
+					Prefix:  &c.ServerMessagePrefix,
+					Params:  []string{c.IrcState.Nick, tokenTarget, "No such channel"},
 				}
-				tokenData["modes"] = modes
-			} else {
-				tokenData["channel"] = tokenFor
+				c.SendClientSignal("data", failMessage.ToLine())
+				return "", nil
 			}
+
+			tokenM.Params = append(tokenM.Params, tokenTarget)
+
+			tokenData["channel"] = targetChan.Name
+			tokenData["joined"] = targetChan.Joined.Unix()
+
+			modes := []string{}
+			for mode := range targetChan.Modes {
+				modes = append(modes, mode)
+			}
+			tokenData["cmodes"] = modes
+		}
+
+		if tokenService == "" || tokenService == "*" {
+			tokenM.Params = append(tokenM.Params, "*")
+		} else {
+			c.SendIrcFail("EXTJWT", "NO_SUCH_SERVICE", "No such service")
+			return "", nil
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenData)
 		tokenSigned, tokenSignedErr := token.SignedString([]byte(c.Gateway.Config.Secret))
 		if tokenSignedErr != nil {
 			c.Log(3, "Error creating JWT token. %s", tokenSignedErr.Error())
-			println(tokenSignedErr.Error())
+			c.SendIrcFail("EXTJWT", "UNKNOWN_ERROR", "Failed to generate token")
+			return "", nil
+		}
+
+		// Spit token if it exceeds max length
+		for len(tokenSigned) > MAX_EXTJWT_SIZE {
+			tokenSignedPart := tokenSigned[:MAX_EXTJWT_SIZE]
+			tokenSigned = tokenSigned[MAX_EXTJWT_SIZE:]
+
+			tokenPartM := tokenM
+			tokenPartM.Params = append(tokenPartM.Params, "*", tokenSignedPart)
+			c.SendClientSignal("data", tokenPartM.ToLine())
 		}
 
 		tokenM.Params = append(tokenM.Params, tokenSigned)
-
 		c.SendClientSignal("data", tokenM.ToLine())
 
 		return "", nil
