@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
 	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
 	"golang.org/x/net/html/charset"
@@ -94,7 +94,7 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 				} else {
 					paramIdx++
 					param := m.GetParam(paramIdx, "")
-					if strings.ToLower(param) == strings.ToLower(c.IrcState.Nick) {
+					if strings.EqualFold(param, c.IrcState.Nick) {
 						if adding {
 							channel.Modes[mode] = ""
 						} else {
@@ -347,7 +347,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 
 		thisHost := strings.ToLower(c.UpstreamConfig.Hostname)
 		target := message.Params[0]
-		for val := range c.Gateway.Clients.Iter() {
+		for val := range c.Gateway.Clients.IterBuffered() {
 			curClient := val.Val.(*Client)
 			sameHost := strings.ToLower(curClient.UpstreamConfig.Hostname) == thisHost
 			if !sameHost {
@@ -355,8 +355,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 			}
 
 			// Only send the message on to either the target nick, or the clients in a set channel
-			curNick := strings.ToLower(curClient.IrcState.Nick)
-			if target != curNick && !curClient.IrcState.HasChannel(target) {
+			if !strings.EqualFold(target, curClient.IrcState.Nick) && !curClient.IrcState.HasChannel(target) {
 				continue
 			}
 
