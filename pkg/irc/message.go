@@ -46,13 +46,16 @@ func (m *Message) ToLine() string {
 
 	if len(m.Tags) > 0 {
 		line += "@"
-
+		tagCount := 0
 		for tagName, tagVal := range m.Tags {
+			tagCount++
 			line += tagName
 			if tagVal != "" {
 				line += "=" + tagVal
 			}
-			line += ";"
+			if tagCount < len(m.Tags) {
+				line += ";"
+			}
 		}
 	}
 
