@@ -130,7 +130,7 @@ func (c *Config) Load() error {
 		configSrc = c.ConfigFile
 	}
 
-	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, configSrc)
+	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true, SpaceBeforeInlineComment: true}, configSrc)
 	if err != nil {
 		return err
 	}
