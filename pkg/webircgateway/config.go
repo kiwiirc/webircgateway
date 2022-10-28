@@ -17,7 +17,6 @@ import (
 type ConfigUpstream struct {
 	// Plugins may assign an arbitary address to an upstream network
 	NetworkCommonAddress string
-	Network              string
 	Hostname             string
 	Port                 int
 	TLS                  bool
@@ -27,6 +26,8 @@ type ConfigUpstream struct {
 	ServerPassword       string
 	GatewayName          string
 	Proxy                *ConfigProxy
+	Protocol             string
+	LocalAddr            string
 }
 
 // ConfigServer - A web server config
@@ -60,6 +61,8 @@ type Config struct {
 	GatewayThrottle       int
 	GatewayTimeout        int
 	GatewayWebircPassword map[string]string
+	GatewayProtocol       string
+	GatewayLocalAddr      string
 	Proxy                 ConfigServer
 	Upstreams             []ConfigUpstream
 	Servers               []ConfigServer
@@ -199,6 +202,10 @@ func (c *Config) Load() error {
 			c.Gateway = section.Key("enabled").MustBool(false)
 			c.GatewayTimeout = section.Key("timeout").MustInt(10)
 			c.GatewayThrottle = section.Key("throttle").MustInt(2)
+
+			validProtocols := []string{"tcp", "tcp4", "tcp6"}
+			c.GatewayProtocol = stringInSliceOrDefault(section.Key("protocol").MustString(""), "tcp", validProtocols)
+			c.GatewayLocalAddr = section.Key("localaddr").MustString("")
 		}
 
 		if section.Name() == "gateway.webirc" {
@@ -251,12 +258,14 @@ func (c *Config) Load() error {
 		if strings.Index(section.Name(), "upstream.") == 0 {
 			upstream := ConfigUpstream{}
 
+			validProtocols := []string{"tcp", "tcp4", "tcp6", "unix"}
+			upstream.Protocol = stringInSliceOrDefault(section.Key("protocol").MustString(""), "tcp", validProtocols)
+
 			hostname := section.Key("hostname").MustString("127.0.0.1")
 			if strings.HasPrefix(strings.ToLower(hostname), "unix:") {
-				upstream.Network = "unix"
+				upstream.Protocol = "unix"
 				upstream.Hostname = hostname[5:]
 			} else {
-				upstream.Network = "tcp"
 				upstream.Hostname = hostname
 				upstream.Port = section.Key("port").MustInt(6667)
 				upstream.TLS = section.Key("tls").MustBool(false)
@@ -266,6 +275,7 @@ func (c *Config) Load() error {
 			upstream.Throttle = section.Key("throttle").MustInt(2)
 			upstream.WebircPassword = section.Key("webirc").MustString("")
 			upstream.ServerPassword = section.Key("serverpassword").MustString("")
+			upstream.LocalAddr = section.Key("localaddr").MustString("")
 
 			upstream.GatewayName = section.Key("gateway_name").MustString("")
 			if strings.Contains(upstream.GatewayName, " ") {

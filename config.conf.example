@@ -97,6 +97,11 @@ timeout = 5
 throttle = 2
 webirc = ""
 serverpassword = ""
+# Outgoing protocol, valid options: tcp, tcp4, tcp6, unix
+# this can be used to force ipv4, ipv6 etc
+protocol = tcp
+# IP address of the local network interface to bind for outgoing connections
+localaddr = ""
 
 
 # A public gateway to any IRC network
@@ -106,6 +111,10 @@ serverpassword = ""
 enabled = false
 timeout = 5
 throttle = 2
+# Outgoing protocol, valid options: tcp, tcp4, tcp6
+protocol = tcp
+# IP address of the local network interface to bind for outgoing connections
+localaddr = ""
 
 # Whitelisted IRC networks while in public gateway mode
 # If any networks are in this list then connections can only be made to these

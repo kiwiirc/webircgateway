@@ -10,13 +10,12 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"golang.org/x/time/rate"
-
-	"sync"
 
 	"github.com/kiwiirc/webircgateway/pkg/dnsbl"
 	"github.com/kiwiirc/webircgateway/pkg/irc"
@@ -310,13 +309,25 @@ func (c *Client) makeUpstreamConnection() (io.ReadWriteCloser, error) {
 		dialer := net.Dialer{}
 		dialer.Timeout = time.Second * time.Duration(upstreamConfig.Timeout)
 
+		if upstreamConfig.LocalAddr != "" {
+			parsedIP := net.ParseIP(upstreamConfig.LocalAddr)
+			if parsedIP != nil {
+				dialer.LocalAddr = &net.TCPAddr{
+					IP:   parsedIP,
+					Port: 0,
+				}
+			} else {
+				client.Log(3, "Failed to parse localaddr for upstream connection \"%s\"", upstreamConfig.LocalAddr)
+			}
+		}
+
 		var conn net.Conn
 		var connErr error
-		if upstreamConfig.Network == "unix" {
+		if upstreamConfig.Protocol == "unix" {
 			conn, connErr = dialer.Dial("unix", upstreamConfig.Hostname)
 		} else {
 			upstreamStr := fmt.Sprintf("%s:%d", upstreamConfig.Hostname, upstreamConfig.Port)
-			conn, connErr = dialer.Dial("tcp", upstreamStr)
+			conn, connErr = dialer.Dial(upstreamConfig.Protocol, upstreamStr)
 		}
 
 		if connErr != nil {
@@ -696,6 +707,8 @@ func (c *Client) configureUpstream() ConfigUpstream {
 	upstreamConfig.Timeout = c.Gateway.Config.GatewayTimeout
 	upstreamConfig.Throttle = c.Gateway.Config.GatewayThrottle
 	upstreamConfig.WebircPassword = c.Gateway.findWebircPassword(c.DestHost)
+	upstreamConfig.Protocol = c.Gateway.Config.GatewayProtocol
+	upstreamConfig.LocalAddr = c.Gateway.Config.GatewayLocalAddr
 
 	return upstreamConfig
 }
