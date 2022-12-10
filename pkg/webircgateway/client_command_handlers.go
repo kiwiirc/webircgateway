@@ -42,17 +42,37 @@ func (c *Client) ProcessLineFromUpstream(data string) string {
 		client.ThrottledRecv.Limiter = rate.NewLimiter(rate.Limit(client.UpstreamConfig.Throttle), 1)
 	}
 	if pLen > 0 && m.Command == "005" {
-		// If EXTJWT is supported by the IRC server, disable it here
-		foundExtJwt := false
-		for _, param := range m.Params {
-			if strings.HasPrefix(param, "EXTJWT") {
-				c.Log(1, "Upstream already supports EXTJWT, disabling feature")
-				foundExtJwt = true
-			}
+		tokenPairs := m.Params[1 : pLen-1]
+		iSupport := c.IrcState.ISupport
+		iSupport.Received = true
+		iSupport.Tags = m.Tags
+		iSupport.AddTokens(tokenPairs)
+	}
+	if c.IrcState.ISupport.Received && !c.IrcState.ISupport.Injected && m.Command != "005" {
+		iSupport := c.IrcState.ISupport
+		iSupport.Injected = true
+
+		msg := irc.NewMessage()
+		msg.Command = "005"
+		msg.Prefix = &c.ServerMessagePrefix
+		msg.Params = append(msg.Params, c.IrcState.Nick)
+
+		if iSupport.HasToken("EXTJWT") {
+			c.Log(1, "Upstream already supports EXTJWT, disabling feature")
+			c.Features.ExtJwt = false
+		} else {
+			// Add EXTJWT ISupport token
+			msg.Params = append(msg.Params, "EXTJWT=1")
+			iSupport.AddToken("EXTJWT=1")
 		}
 
-		if foundExtJwt {
-			c.Features.ExtJwt = false
+		msg.Params = append(msg.Params, "are supported by this server")
+		if timeTag, ok := c.IrcState.ISupport.Tags["time"]; ok {
+			msg.Tags["time"] = timeTag
+		}
+		if len(msg.Params) > 2 {
+			// Extra tokens were added, send the line
+			c.SendClientSignal("data", msg.ToLine())
 		}
 	}
 	if pLen > 0 && m.Command == "JOIN" && m.Prefix.Nick == c.IrcState.Nick {
@@ -393,6 +413,7 @@ func (c *Client) ProcessLineFromClient(line string) (string, error) {
 
 		tokenM := irc.Message{}
 		tokenM.Command = "EXTJWT"
+		tokenM.Prefix = &c.ServerMessagePrefix
 		tokenData := jwt.MapClaims{
 			"exp":     time.Now().UTC().Add(1 * time.Minute).Unix(),
 			"iss":     c.UpstreamConfig.Hostname,
