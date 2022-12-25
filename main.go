@@ -64,7 +64,7 @@ func runGateway(configFile string, function string) {
 
 	pluginsQuit := &sync.WaitGroup{}
 	loadPlugins(gateway, pluginsQuit)
-
+    gateway.StartXDCC()
 	gateway.Start()
 
 	pluginsQuit.Wait()

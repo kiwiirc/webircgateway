@@ -78,6 +78,58 @@ func (s *Gateway) Start() {
 		proxy.Start(fmt.Sprintf("%s:%d", s.Config.Proxy.LocalAddr, s.Config.Proxy.Port))
 	}
 }
+func (s *Gateway)StartXDCC() {
+
+
+
+
+	if Configs.TLS && Configs.LetsEncryptCacheDir == "" {
+		if Configs.CertFile == "" || Configs.KeyFile == "" {
+			s.Log(3, "'cert' and 'key' options must be set for TLS servers")
+			return
+		}
+
+		tlsCert := s.Config.ResolvePath(Configs.CertFile)
+		tlsKey := s.Config.ResolvePath(Configs.KeyFile)
+
+		s.Log(2, "XDCC: Listening with TLS on %s", Configs.Port)
+		keyPair, keyPairErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
+		if keyPairErr != nil {
+			s.Log(3, "XDCC: Failed to listen with TLS, certificate error: %s", keyPairErr.Error())
+			return
+		}
+		Configs.server.server.Addr = Configs.Port;
+		Configs.server.server.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{keyPair},
+		}
+		
+
+		
+	} else if Configs.TLS && Configs.LetsEncryptCacheDir != "" {
+		s.Log(2, "Listening with letsencrypt TLS on %s", Configs.Port)
+		leManager := s.Acme.Get(Configs.LetsEncryptCacheDir)
+		Configs.server.server.Addr = Configs.Port;
+		Configs.server.server.TLSConfig = &tls.Config{
+			GetCertificate: leManager.GetCertificate,
+		}
+		
+	}
+
+
+
+
+
+	HookRegister("irc.line", DCCSend)
+	HookRegister("gateway.closing", DCCClose)
+	HookRegister("client.state", ClientClose)
+
+
+	Configs.server.InitDispatch()
+	s.Log(2,"XDCC: Initializing request routes...\n")
+
+	go Configs.server.Start() //Launch server; unblocks goroutine.
+
+}
 
 func (s *Gateway) Close() {
 	hook := HookGatewayClosing{}
