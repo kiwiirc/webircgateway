@@ -208,12 +208,7 @@ func DCCSend(hook *HookIrcLine) {
 	    hook.Message.Command = "NOTICE"
 		hook.Message.Params[1] = fmt.Sprintf("http://%s:3000/%s",Configs.DomainName, parts.file)
 		
-		_, ok := Configs.server.fileNames[parts.file]
-		if ok{
-			client.SendClientSignal("data", hook.Message.ToLine())
-
-			return
-		}
+		
 		
 		Configs.server.AddFile(parts.file, *parts)
 		log.Printf(parts.file)
