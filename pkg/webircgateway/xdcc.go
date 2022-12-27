@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"regexp"
 	"bytes"
 	
 	"github.com/kiwiirc/webircgateway/pkg/irc"
@@ -78,13 +79,16 @@ type ParsedParts struct {
 }
 
 func parseSendParams(text string) *ParsedParts {
-	parts := strings.Split(text, " ")
-	
+	re := regexp.MustCompile(`(?:[^\s"]+|"[^"]*")+`)
+	replace := regexp.MustCompile(`^"(.+)"$`)
+
+	parts := re.FindAllString(text, -1)
+
 	ipInt, _ := strconv.ParseUint(parts[3], 10, 32)
 	portInt, _ := strconv.ParseInt(parts[4], 10, 0)
 	lengthInt, _ := strconv.ParseUint(parts[5], 10, 64)
 	partsStruct := &ParsedParts{
-		file:   parts[2], 
+		file:   replace.ReplaceAllString(parts[2], "$1"),
 		ip:     int2ip(uint32(ipInt)),
 		port:   int(portInt),
 		length: lengthInt,
