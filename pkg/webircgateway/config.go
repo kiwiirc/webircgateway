@@ -331,6 +331,19 @@ func (c *Config) Load() error {
 				c.ReverseProxies = append(c.ReverseProxies, *validRange)
 			}
 		}
+		
+			if strings.Index(section.Name(), "XDCC") == 0 {
+				
+	
+				Configs.DomainName = section.Key("DomainName").MustString("")
+				Configs.TLS = section.Key("TLS").MustBool(false)
+				Configs.Port = section.Key("Port").MustString("3000")
+				Configs.LetsEncryptCacheDir = section.Key("LetsEncryptCacheDir").MustString("")
+				Configs.CertFile = section.Key("CertFile").MustString("")
+				Configs.KeyFile = section.Key("KeyFile").MustString("")
+				
+	
+		}
 	}
 
 	return nil
