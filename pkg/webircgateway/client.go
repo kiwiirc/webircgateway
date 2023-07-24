@@ -76,6 +76,8 @@ type Client struct {
 	}
 	// The specific message-tags CAP that the client has requested if we are wrapping it
 	RequestedMessageTagsCap string
+	// Prefix used by the server when sending its own messages
+	ServerMessagePrefix irc.Mask
 }
 
 var nextClientID uint64 = 1
@@ -236,6 +238,14 @@ func (c *Client) SendClientSignal(signal string, args ...string) {
 
 func (c *Client) SendIrcError(message string) {
 	c.SendClientSignal("data", "ERROR :"+message)
+}
+
+func (c *Client) SendIrcFail(params ...string) {
+	failMessage := irc.Message{
+		Command: "FAIL",
+		Params:  params,
+	}
+	c.SendClientSignal("data", failMessage.ToLine())
 }
 
 func (c *Client) connectUpstream() {
