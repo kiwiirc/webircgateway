@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/kiwiirc/webircgateway/pkg/recaptcha"
 	"github.com/kiwiirc/webircgateway/pkg/webircgateway"
 )
 
@@ -38,6 +39,9 @@ func main() {
 		fmt.Println("-run can either be 'gateway' or 'proxy'")
 		os.Exit(1)
 	}
+
+	// Start recaptcha cleanup function
+	recaptcha.Init()
 
 	runGateway(*configFile, *startSection)
 }
