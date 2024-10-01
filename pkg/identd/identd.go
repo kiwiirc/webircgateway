@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/textproto"
+	"strings"
 	"sync"
 )
 
@@ -63,8 +64,11 @@ func (i *Server) ListenForRequests(serverSocket *net.Listener) {
 				return
 			}
 
+			// Remove all spaces, some servers like to send "%d , %d" but the spec examples use "%d, %d"
+			line = strings.ReplaceAll(line, " ", "")
+
 			var localPort, remotePort int
-			fmt.Sscanf(line, "%d, %d", &localPort, &remotePort)
+			fmt.Sscanf(line, "%d,%d", &localPort, &remotePort)
 			if localPort > 0 && remotePort > 0 {
 				i.EntriesLock.Lock()
 				ident, ok := i.Entries[fmt.Sprintf("%d-%d", localPort, remotePort)]
