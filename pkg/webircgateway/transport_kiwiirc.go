@@ -200,5 +200,7 @@ func (c *TransportKiwiircChannel) handleIncomingLine(line string) {
 }
 
 func (c *TransportKiwiircChannel) close() {
-	c.Client.upstream.Close()
+	if c.Client.upstream != nil {
+		c.Client.upstream.Close()
+	}
 }
